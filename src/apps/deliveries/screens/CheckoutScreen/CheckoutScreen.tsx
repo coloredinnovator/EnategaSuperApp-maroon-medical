@@ -20,6 +20,8 @@ import useAddress from '../../../../general/hooks/useAddress';
 import useSelectSavedAddress from '../../../../general/hooks/useSelectSavedAddress';
 import { useCart } from '../../hooks/useCart';
 import { useCheckoutPreview } from '../../hooks/useCheckoutPreview';
+import { useUseCouponMutation } from '../../hooks/useUseCouponMutation';
+import { claimedCouponsKeys } from '../../hooks/useClaimedCouponsQuery';
 import { formatCartPrice } from '../../components/cart/cartUtils';
 import { formatDeliveryAddressLabel } from '../../../../general/utils/address';
 import { usePlaceOrder } from '../../hooks/usePlaceOrder';
@@ -52,6 +54,7 @@ import {
   getLatestStripeCheckoutOrderId,
 } from '../../components/checkout/checkoutStripeOrderUtils';
 import { deliveryKeys } from '../../api/queryKeys';
+import { useCheckoutCouponStore } from '../../stores/useCheckoutCouponStore';
 
 const DELIVERY_ROOT_ROUTES = ['SingleVendor', 'MultiVendor', 'Chain'] as const;
 
@@ -75,6 +78,7 @@ function getPreviewInput(
   cart: CartResponse | undefined,
   orderType: CheckoutOrderType,
   selectedAddressId?: string,
+  couponCode?: string,
   scheduledAt?: string,
   riderTip?: number,
 ) {
@@ -86,11 +90,19 @@ function getPreviewInput(
     return null;
   }
 
+  console.log("Preview Input:", {
+    storeId: cart.storeId,
+    bucketId: cart.bucketId,
+    orderType,
+    addressId: orderType === 'delivery' ? selectedAddressId : undefined,
+    couponCode: couponCode ?? undefined,
+  });
   return {
     storeId: cart.storeId,
     bucketId: cart.bucketId,
     orderType,
     addressId: orderType === 'delivery' ? selectedAddressId : undefined,
+    couponCode: couponCode ?? undefined,
     scheduledAt,
     riderTip: riderTip && riderTip > 0 ? riderTip : undefined,
   };
@@ -127,6 +139,9 @@ export default function CheckoutScreen() {
   });
   const [selectedTip, setSelectedTip] = React.useState(0);
   const [customTipValue, setCustomTipValue] = React.useState('');
+  const selectedCoupon = useCheckoutCouponStore((state) => state.selectedCoupon);
+  const clearCheckoutCoupon = useCheckoutCouponStore((state) => state.clearCoupon);
+  const useCouponMutation = useUseCouponMutation();
   const {
     data: cart,
     isPending: isCartPending,
@@ -135,8 +150,15 @@ export default function CheckoutScreen() {
   } = useCart();
   const previewScheduledAt = deliveryTimeMode === 'schedule' ? scheduledAt ?? undefined : undefined;
   const previewInput = React.useMemo(
-    () => getPreviewInput(cart, orderType, selectedAddress?.id, previewScheduledAt, selectedTip),
-    [cart, orderType, selectedAddress?.id, previewScheduledAt, selectedTip],
+    () => getPreviewInput(
+      cart,
+      orderType,
+      selectedAddress?.id,
+      selectedCoupon?.code,
+      previewScheduledAt,
+      selectedTip,
+    ),
+    [cart, orderType, selectedAddress?.id, selectedCoupon?.code, previewScheduledAt, selectedTip],
   );
   const {
     data: preview,
@@ -146,7 +168,33 @@ export default function CheckoutScreen() {
     refetch: refetchPreview,
   } = useCheckoutPreview(previewInput);
 
-  const navigateToOrderDetails = React.useCallback((orderId: string) => {
+  React.useEffect(() => {
+    if (!previewInput) {
+      return;
+    }
+
+    console.log('[CheckoutPreview][Request]', {
+      ...previewInput,
+      selectedCouponCode: selectedCoupon?.code ?? null,
+    });
+  }, [previewInput, selectedCoupon?.code]);
+
+  React.useEffect(() => {
+    if (!preview) {
+      return;
+    }
+
+    console.log('[CheckoutPreview][Response]', {
+      pricing: preview.pricing,
+      storeId: preview.store?.id,
+      storeName: preview.store?.name,
+      orderType: preview.fulfillment?.orderType,
+      itemCount: preview.bucket?.itemCount,
+      selectedCouponCode: selectedCoupon?.code ?? null,
+    });
+  }, [preview, selectedCoupon?.code]);
+
+  const navigateToOrderTracking = React.useCallback((orderId: string) => {
     const rootRouteName = getCheckoutRootRoute(navigation);
 
     navigation.reset({
@@ -156,7 +204,7 @@ export default function CheckoutScreen() {
           name: rootRouteName,
         },
         {
-          name: 'OrderDetailsScreen',
+          name: 'OrderTrackingScreen',
           params: {
             orderId,
           },
@@ -183,7 +231,8 @@ export default function CheckoutScreen() {
       }
 
       showToast.success(t('checkout_place_order_success'));
-      navigateToOrderDetails(response.orderId);
+      clearCheckoutCoupon();
+      navigateToOrderTracking(response.orderId);
     },
   });
 
@@ -317,6 +366,7 @@ export default function CheckoutScreen() {
         restaurant: messages.restaurant,
         courier: orderType === 'delivery' ? messages.courier : '',
       }),
+      couponCode: selectedCoupon?.code,
       riderTip: orderType === 'delivery' && selectedTip > 0 ? selectedTip : undefined,
       scheduledAt: deliveryTimeMode === 'schedule' ? scheduledAt ?? undefined : undefined,
       successUrl: paymentMethod === 'stripe' ? CHECKOUT_STRIPE_SUCCESS_URL : undefined,
@@ -333,6 +383,7 @@ export default function CheckoutScreen() {
     paymentMethod,
     placeOrderMutation,
     selectedAddress?.id,
+    selectedCoupon?.code,
     messages,
     deliveryTimeMode,
     scheduledAt,
@@ -341,8 +392,36 @@ export default function CheckoutScreen() {
   ]);
 
   const handlePromoPress = React.useCallback(() => {
-    showToast.info(t('checkout_promo_pending'));
-  }, [t]);
+    navigation.navigate('Coupons');
+  }, [navigation]);
+
+  const handlePromoRemove = React.useCallback(async () => {
+    if (!selectedCoupon?.id) {
+      clearCheckoutCoupon();
+      return;
+    }
+
+    try {
+      await useCouponMutation.mutateAsync({
+        id: selectedCoupon.id,
+        isActive: false,
+      });
+      clearCheckoutCoupon();
+      void queryClient.invalidateQueries({ queryKey: claimedCouponsKeys.all });
+      showToast.success(t('checkout_promo_removed'));
+      void refetchPreview();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : t('coupon_deactivate_error_fallback');
+      showToast.error(t('coupon_deactivate_error_title'), message);
+    }
+  }, [
+    clearCheckoutCoupon,
+    refetchPreview,
+    selectedCoupon?.id,
+    t,
+    useCouponMutation,
+  ]);
 
   const handleStripeCheckoutBackPress = React.useCallback(() => {
     setStripeCheckout(null);
@@ -361,7 +440,7 @@ export default function CheckoutScreen() {
 
       if (orderId) {
         showToast.success(t('checkout_place_order_success'));
-        navigateToOrderDetails(orderId);
+        navigateToOrderTracking(orderId);
         void Promise.all([
           queryClient.invalidateQueries({ queryKey: deliveryKeys.cart() }),
           queryClient.invalidateQueries({ queryKey: deliveryKeys.cartCount() }),
@@ -382,7 +461,7 @@ export default function CheckoutScreen() {
         },
       ],
     } as never);
-  }, [deliveryTimeMode, navigateToOrderDetails, navigation, queryClient, t]);
+  }, [deliveryTimeMode, navigateToOrderTracking, navigation, queryClient, t]);
 
   const handlePaymentMethodPress = React.useCallback(() => {
     setIsPaymentMethodScreenVisible(true);
@@ -490,6 +569,12 @@ export default function CheckoutScreen() {
   const paymentIconName = paymentMethod === 'stripe' ? 'card-outline' : 'cash-outline';
   const paymentTitle = getCheckoutPaymentMethodTitle(paymentMethod, t);
   const paymentSubtitle = getCheckoutPaymentMethodSubtitle(paymentMethod, t);
+  const isPromoApplied = Boolean(selectedCoupon?.code);
+  const promoTitle = selectedCoupon?.title ?? t('checkout_promo_title');
+  const promoCode = selectedCoupon?.code ?? null;
+  const promoSubtitle = selectedCoupon
+    ? t('checkout_promo_tap_to_change')
+    : t('checkout_promo_subtitle');
   const isPaymentAvailable = isCheckoutPaymentMethodAvailable(
     paymentMethod,
     preview?.store,
@@ -587,6 +672,7 @@ export default function CheckoutScreen() {
         deliveryTimeMode={deliveryTimeMode}
         hasAddressRequirement={orderType === 'delivery' && !selectedAddress?.id}
         isPickupEnabled={preview?.store.pickupAllowed ?? true}
+        isPromoApplied={isPromoApplied}
         isPlacingOrder={placeOrderMutation.isPending}
         isPaymentBlocked={!isPaymentAvailable}
         isPreviewEnabled={Boolean(previewInput)}
@@ -604,6 +690,7 @@ export default function CheckoutScreen() {
         onPlaceOrderPress={handlePlaceOrderPress}
         onPaymentPress={handlePaymentMethodPress}
         onPromoPress={handlePromoPress}
+        onPromoRemove={handlePromoRemove}
         onRestaurantMessagePress={() => {
           handleMessagePress('restaurant');
         }}
@@ -620,6 +707,9 @@ export default function CheckoutScreen() {
         paymentIconName={paymentIconName}
         paymentSubtitle={paymentSubtitle}
         paymentTitle={paymentTitle}
+        promoCode={promoCode}
+        promoTitle={promoTitle}
+        promoSubtitle={promoSubtitle}
         preview={preview ?? null}
         restaurantMessage={messages.restaurant}
         scheduledAt={scheduledAt}

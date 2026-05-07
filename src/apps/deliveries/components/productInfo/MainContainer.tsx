@@ -5,6 +5,7 @@ import {
   Animated,
   Pressable,
   RefreshControl,
+  StatusBar,
   StyleSheet,
   View,
   useWindowDimensions,
@@ -124,6 +125,11 @@ export default function MainContainer({
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <StatusBar
+        translucent
+        backgroundColor="transparent"
+        barStyle="light-content"
+      />
       <Animated.ScrollView
         bounces={false}
         contentContainerStyle={styles.contentContainer}

@@ -41,8 +41,8 @@ export default function ItemInfo({ name, description, priceLabel }: Props) {
         style={[
           styles.title,
           {
-            fontSize: typography.size.h5,
-            lineHeight: 38,
+            fontSize: typography.size.lg,
+            lineHeight: typography.lineHeight.xl,
           },
         ]}
       >
@@ -55,7 +55,7 @@ export default function ItemInfo({ name, description, priceLabel }: Props) {
             color={colors.blue800}
             weight="medium"
             style={{
-              fontSize: typography.size.md2,
+              fontSize: typography.size.md,
               lineHeight: typography.lineHeight.md,
             }}
           >
@@ -88,7 +88,7 @@ export default function ItemInfo({ name, description, priceLabel }: Props) {
         <Text
           color={colors.text}
           style={{
-            fontSize: typography.size.md2,
+            fontSize: typography.size.md,
             lineHeight: typography.lineHeight.md + 2,
           }}
         >
