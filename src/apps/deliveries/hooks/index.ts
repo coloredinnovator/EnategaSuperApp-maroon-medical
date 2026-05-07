@@ -9,6 +9,7 @@ export {
   useShopTypeStores,
   useShopTypeStoresSections,
   useShopTypes,
+  useStoreRecommendedProducts,
   useStoreProducts,
   useStoreView,
   useTopBrands,

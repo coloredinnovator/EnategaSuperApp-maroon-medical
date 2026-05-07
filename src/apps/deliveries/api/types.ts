@@ -304,6 +304,12 @@ export interface DeliveryOrderAgainParams {
     limit?: number;
 }
 
+export interface DeliveryStoreRecommendedProductsParams {
+    storeId: string;
+    offset?: number;
+    limit?: number;
+}
+
 export interface DeliveryBannerStore {
     id: string;
     address?: string | null;
