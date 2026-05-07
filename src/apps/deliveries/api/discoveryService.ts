@@ -15,6 +15,7 @@ import type {
     DeliveryOrderAgainApiResponse,
     DeliveryOrderAgainItem,
     DeliveryOrderAgainParams,
+    DeliveryStoreRecommendedProductsParams,
     DeliveryTopBrand,
     DeliveryTopBrandsApiResponse,
     DeliveryTopBrandsParams,
@@ -44,6 +45,11 @@ const DEALS_DEFAULTS = {
 } as const;
 
 const ORDER_AGAIN_DEFAULTS = {
+    offset: 0,
+    limit: 10,
+} as const;
+
+const STORE_RECOMMENDED_PRODUCTS_DEFAULTS = {
     offset: 0,
     limit: 10,
 } as const;
@@ -708,6 +714,41 @@ export const discoveryService = {
             return [];
         } catch (error) {
             console.error('order again request failed', error);
+            throw error;
+        }
+    },
+
+    /** Fetch recommended products for a specific deliveries store. */
+    getStoreRecommendedProducts: async (
+        params: DeliveryStoreRecommendedProductsParams,
+    ): Promise<DeliveryOrderAgainItem[]> => {
+        const {
+            storeId,
+            offset = STORE_RECOMMENDED_PRODUCTS_DEFAULTS.offset,
+            limit = STORE_RECOMMENDED_PRODUCTS_DEFAULTS.limit,
+        } = params;
+
+        try {
+            const response = await apiClient.get<DeliveryOrderAgainApiResponse>(
+                `/api/v1/apps/deliveries/discovery/stores/${storeId}/recommended-products`,
+                { offset, limit },
+            );
+
+            if (Array.isArray(response)) {
+                return response;
+            }
+
+            if (isPaginatedOrderAgainResponse(response)) {
+                return response.items;
+            }
+
+            if (isWrappedOrderAgainResponse(response)) {
+                return response.data;
+            }
+
+            return [];
+        } catch (error) {
+            console.error('store recommended products request failed', error);
             throw error;
         }
     }

@@ -304,11 +304,32 @@ export interface DeliveryOrderAgainParams {
     limit?: number;
 }
 
+export interface DeliveryStoreRecommendedProductsParams {
+    storeId: string;
+    offset?: number;
+    limit?: number;
+}
+
 export interface DeliveryBannerStore {
     id: string;
     address?: string | null;
     storeImage?: string | null;
     coverImage?: string | null;
+}
+
+export type DeliveryBannerActionType = 'store' | 'product' | 'shop_type';
+
+export interface DeliveryBannerProduct {
+    id: string;
+    name?: string | null;
+    imageUrl?: string | null;
+    storeId?: string | null;
+}
+
+export interface DeliveryBannerShopType {
+    id: string;
+    name?: string | null;
+    image?: string | null;
 }
 
 export interface DeliveryBanner {
@@ -317,8 +338,13 @@ export interface DeliveryBanner {
     description?: string | null;
     bannerVideoLink?: string | null;
     bannerImageLink?: string | null;
+    actionType?: DeliveryBannerActionType | null;
     relatedStore?: string | null;
+    relatedProduct?: string | null;
+    relatedShopType?: string | null;
     store?: DeliveryBannerStore | null;
+    product?: DeliveryBannerProduct | null;
+    shopType?: DeliveryBannerShopType | null;
 }
 
 export interface DeliveryBannersParams {
