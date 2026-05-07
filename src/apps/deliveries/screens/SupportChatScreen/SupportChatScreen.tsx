@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   ScrollView,
   StyleSheet,
@@ -39,6 +40,7 @@ import {
   getSupportChatOtherParticipant,
   getSupportChatParticipantId,
 } from '../../utils/supportChatMappers';
+import { DELIVERIES_SUPPORT_PHONE_NUMBER } from '../../constants/support';
 
 type SupportChatRouteProp = RouteProp<SupportNavigationParamList, 'SupportChat'>;
 
@@ -315,10 +317,21 @@ export default function SupportChatScreen() {
     );
   };
 
+  const handleCallSupport = async () => {
+    try {
+      await Linking.openURL(`tel:${DELIVERIES_SUPPORT_PHONE_NUMBER}`);
+    } catch {
+      showToast.error(t('support_call_action'));
+    }
+  };
+
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
       <SupportHeader
         backAccessibilityLabel={t('support_back_action')}
+        onRightPress={() => {
+          void handleCallSupport();
+        }}
         rightAccessibilityLabel={t('support_call_action')}
         title={t('support_title')}
       />

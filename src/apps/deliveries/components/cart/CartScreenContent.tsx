@@ -57,8 +57,19 @@ export default function CartScreenContent({
   }, [navigation]);
 
   const handleStartShopping = React.useCallback(() => {
-    navigation.goBack();
-  }, [navigation]);
+    if (!cart.storeId) return;
+
+    navigation.navigate('MultiVendor', {
+      screen: 'StoreDetails',
+      params: {
+        store: {
+          storeId: cart.storeId,
+          vendorId: '',
+          name: '',
+        },
+      },
+    });
+  }, [cart.storeId, navigation]);
 
   const handleRecommendationPress = React.useCallback(
     (productId: string) => {
@@ -81,7 +92,6 @@ export default function CartScreenContent({
       <View style={styles.container}>
         <CartHeader onBackPress={handleBack} />
         <CartEmptyState onStartShoppingPress={handleStartShopping} />
-        {footer}
       </View>
     );
   }

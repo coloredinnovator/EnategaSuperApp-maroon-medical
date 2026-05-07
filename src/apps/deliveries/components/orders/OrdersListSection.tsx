@@ -14,6 +14,24 @@ import OrderListSkeleton from "./OrderListSkeleton";
 import Text from "../../../../general/components/Text";
 import { useTheme } from "../../../../general/theme/theme";
 
+const DELIVERY_ROOT_ROUTES = ["SingleVendor", "MultiVendor", "Chain"] as const;
+
+function getOrdersRootRoute(
+  navigation: NativeStackNavigationProp<DeliveriesStackParamList>,
+): (typeof DELIVERY_ROOT_ROUTES)[number] {
+  const routes = navigation.getState().routes;
+
+  for (let index = routes.length - 1; index >= 0; index -= 1) {
+    const routeName = routes[index]?.name;
+
+    if (DELIVERY_ROOT_ROUTES.includes(routeName as (typeof DELIVERY_ROOT_ROUTES)[number])) {
+      return routeName as (typeof DELIVERY_ROOT_ROUTES)[number];
+    }
+  }
+
+  return "MultiVendor";
+}
+
 type Props = {
   variant: "active" | "past" | "scheduled";
   orders: DeliveryOrderListItem[];
@@ -72,6 +90,18 @@ const OrdersListSection = ({
       orderId: order.orderId,
     });
   };
+
+  const handleStartShoppingPress = () => {
+    navigation.reset({
+      index: 0,
+      routes: [
+        {
+          name: getOrdersRootRoute(navigation),
+        },
+      ],
+    });
+  };
+
   return (
     <FlatList
       data={orders}
@@ -107,6 +137,7 @@ const OrdersListSection = ({
           title={getEmptyTitle(variant, t)}
           description={getEmptyDescription(variant, t)}
           ctaLabel={t("orders_empty_history_cta")}
+          onPress={handleStartShoppingPress}
           svgName={emptySvgName}
         />
       }
