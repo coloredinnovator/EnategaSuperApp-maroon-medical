@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { Linking } from 'react-native';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
@@ -7,8 +8,10 @@ import SupportIssueDropdown from '../../../../general/components/support/Support
 import SupportHeader from '../../../../general/components/support/SupportHeader';
 import SupportTopicItem from '../../../../general/components/support/SupportTopicItem';
 import Text from '../../../../general/components/Text';
+import { showToast } from '../../../../general/components/AppToast';
 import { useAuthSessionQuery } from '../../../../general/hooks/useAuthQueries';
 import { useTheme } from '../../../../general/theme/theme';
+import { DELIVERIES_SUPPORT_PHONE_NUMBER } from '../../constants/support';
 import { useSupportTicketFormConfigQuery } from '../../hooks/useSupportTicketFormConfigQuery';
 import { SupportHomeNavigationProp } from '../../navigation/supportNavigationTypes';
 import { buildSupportOptions, orderSupportCategoryKeys } from '../../utils/supportFormOptions';
@@ -20,6 +23,13 @@ export default function SupportScreen() {
   const sessionQuery = useAuthSessionQuery();
   const supportTicketFormConfigQuery = useSupportTicketFormConfigQuery();
   const displayName = sessionQuery.data?.user?.name ?? t('support_guest_name');
+  const handleCallSupport = async () => {
+    try {
+      await Linking.openURL(`tel:${DELIVERIES_SUPPORT_PHONE_NUMBER}`);
+    } catch {
+      showToast.error(t('support_call_action'));
+    }
+  };
   const issueOptions = useMemo(
     () => {
       const categoryKeys = orderSupportCategoryKeys(
@@ -44,6 +54,9 @@ export default function SupportScreen() {
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
       <SupportHeader
         backAccessibilityLabel={t('support_back_action')}
+        onRightPress={() => {
+          void handleCallSupport();
+        }}
         rightAccessibilityLabel={t('support_call_action')}
         title={t('support_title')}
       />
