@@ -102,6 +102,16 @@ type UseOrderAgainOptions = Omit<
   'queryKey' | 'queryFn'
 >;
 
+type UseStoreRecommendedProductsOptions = Omit<
+  UseQueryOptions<DeliveryOrderAgainItem[], ApiError>,
+  'queryKey' | 'queryFn'
+>;
+
+type UseStoreRecommendedProductsParams = {
+  offset?: number;
+  limit?: number;
+};
+
 // type UseShopTypeProductsOptions = Omit<
 //   UseQueryOptions<DeliveryShopTypeProduct[], ApiError>,
 //   'queryKey' | 'queryFn'
@@ -638,5 +648,26 @@ export function useOrderAgain(options?: UseOrderAgainOptions) {
     queryKey: deliveryKeys.orderAgain(),
     queryFn: () => discoveryService.getOrderAgain(),
     ...options,
+  });
+}
+export function useStoreRecommendedProducts(
+  storeId?: string | null,
+  params: UseStoreRecommendedProductsParams = {},
+  options?: UseStoreRecommendedProductsOptions,
+) {
+  const { offset = 0, limit = 10 } = params;
+  const safeStoreId = storeId ?? '';
+  const { enabled = true, ...queryOptions } = options ?? {};
+
+  return useQuery<DeliveryOrderAgainItem[], ApiError>({
+    ...queryOptions,
+    queryKey: deliveryKeys.storeRecommendedProducts(safeStoreId, { offset, limit }),
+    queryFn: () =>
+      discoveryService.getStoreRecommendedProducts({
+        storeId: safeStoreId,
+        offset,
+        limit,
+      }),
+    enabled: enabled && Boolean(storeId),
   });
 }
