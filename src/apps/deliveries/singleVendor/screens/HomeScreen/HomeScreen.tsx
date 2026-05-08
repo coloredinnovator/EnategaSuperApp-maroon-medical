@@ -82,9 +82,10 @@ export default function HomeScreen() {
   }, [navigation]);
 
   return (
-    <View style={[styles.screen, { backgroundColor: colors.background, gap: 10 }]}>
+    <View style={[styles.screen, { backgroundColor: colors.background }]}>
       <AppSwitcherTopBar activeKey="deliveries" />
       <MultiVendorAddressHeader
+        includeTopInset={false}
         addresses={addresses}
         cartCount={cartCount?.totalItems}
         onAddAddressPress={handleOpenAddressSheet}

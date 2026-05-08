@@ -121,9 +121,10 @@ export default function HomeScreen({}: Props) {
   }, [setSelectedMenuTemplateId]);
 
   return (
-    <View style={[styles.screen, { backgroundColor: colors.background, gap: 10 }]}>
+    <View style={[styles.screen, { backgroundColor: colors.background }]}>
       <AppSwitcherTopBar activeKey="deliveries" />
       <MultiVendorAddressHeader
+        includeTopInset={false}
         addressVariant="label"
         addresses={addresses}
         onAddAddressPress={handleOpenAddressSheet}

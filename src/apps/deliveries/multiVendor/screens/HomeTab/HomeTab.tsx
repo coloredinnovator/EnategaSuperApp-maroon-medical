@@ -86,9 +86,10 @@ export default function HomeTab() {
   }, [navigation]);
 
   return (
-    <View style={{flex: 1, backgroundColor: colors.background, gap: 10}}>
+    <View style={{flex: 1, backgroundColor: colors.background}}>
       <AppSwitcherTopBar activeKey="deliveries" />
       <MultiVendorAddressHeader
+        includeTopInset={false}
         addresses={addresses}
         onAddAddressPress={handleOpenAddressSheet}
         onAddressPress={handleOpenAddressSheet}
