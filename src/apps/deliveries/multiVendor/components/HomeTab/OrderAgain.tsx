@@ -5,11 +5,11 @@ import { StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import HorizontalList from '../../../../../general/components/HorizontalList';
 import SectionActionHeader from '../../../../../general/components/SectionActionHeader';
-import { DiscoverySectionState } from '../../../components/discovery';
 import { useOrderAgain } from '../../../hooks';
 import ProductCard from '../../../components/productCard/ProductCard';
 import StoreMiniCardSkeleton from './HomeTabSkeletons/StoreMiniCardSkeleton';
 import type { MultiVendorBottomTabParamList } from '../../navigation/types';
+import DeliveriesSectionEmptyState from '../../../components/home/DeliveriesSectionEmptyState';
 import type { GenericListFilters } from '../../../components/filters/types';
 
 type NavigationProp = BottomTabNavigationProp<MultiVendorBottomTabParamList>;
@@ -66,7 +66,7 @@ export default function OrderAgain(props: Props) {
       {isOrderAgainPending ? (
         <StoreMiniCardSkeleton />
       ) : orderAgainData.length === 0 ? (
-        <DiscoverySectionState
+        <DeliveriesSectionEmptyState
           title={t('multi_vendor_home_section_empty_title')}
           message={t('multi_vendor_home_section_empty_order_again')}
         />

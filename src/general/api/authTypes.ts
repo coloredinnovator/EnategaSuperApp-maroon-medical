@@ -101,7 +101,7 @@ export type EmailLoginRespoce = {
 export type GoogleLoginPayload = {
   idToken: string;
   user_type: "Customer" | "Rider";
-  device_push_token: string;
+  device_push_token?: string;
 };
 
 export type GoogleLoginResponse = {

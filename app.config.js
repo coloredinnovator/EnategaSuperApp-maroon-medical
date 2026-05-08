@@ -50,6 +50,7 @@ module.exports = {
     },
     plugins: [
       'expo-secure-store',
+      'expo-notifications',
       [
         '@stripe/stripe-react-native',
         {

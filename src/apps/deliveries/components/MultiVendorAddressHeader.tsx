@@ -15,6 +15,7 @@ import {
 type Props = {
   addresses?: ProfileAddress[];
   addressVariant?: 'button' | 'label';
+  includeTopInset?: boolean;
   cartCount?: number;
   onAddAddressPress?: () => void;
   onAddressPress?: () => void;
@@ -26,6 +27,7 @@ type Props = {
 export default function MultiVendorAddressHeader({
   addresses = [],
   addressVariant = 'button',
+  includeTopInset = true,
   cartCount = 0,
   onAddAddressPress,
   onAddressPress,
@@ -47,7 +49,12 @@ export default function MultiVendorAddressHeader({
     selectedAddressLabel;
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + 4 }]}>
+    <View
+      style={[
+        styles.container,
+        { paddingTop: includeTopInset ? insets.top + 4 : 0 },
+      ]}
+    >
       {resolvedSelectedAddress && addressVariant === 'label' ? (
         <Pressable
           accessibilityLabel={
@@ -271,6 +278,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     minHeight: 64,
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 12,
   },
 });

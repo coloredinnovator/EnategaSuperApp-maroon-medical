@@ -22,6 +22,7 @@ import useSavedAddresses from '../../../../../general/hooks/useSavedAddresses';
 import { styles } from './HomeTabStyle';
 import useAddress from '../../../../../general/hooks/useAddress';
 import useSelectSavedAddress from '../../../../../general/hooks/useSelectSavedAddress';
+import AppSwitcherTopBar from '../../../../../general/components/appSwitch/AppSwitcherTopBar';
 
 type NavProp = NativeStackNavigationProp<DeliveriesStackParamList>;
 
@@ -85,8 +86,10 @@ export default function HomeTab() {
   }, [navigation]);
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background, gap: 10 }}>
+    <View style={{flex: 1, backgroundColor: colors.background}}>
+      <AppSwitcherTopBar activeKey="deliveries" />
       <MultiVendorAddressHeader
+        includeTopInset={false}
         addresses={addresses}
         onAddAddressPress={handleOpenAddressSheet}
         onAddressPress={handleOpenAddressSheet}
