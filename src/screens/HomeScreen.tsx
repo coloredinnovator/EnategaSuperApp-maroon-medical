@@ -6,26 +6,19 @@ import HomeHeader from './home/HomeHeader';
 import HomeLocationPermissionPopup, {
   LocationPopupMode,
 } from './home/HomeLocationPermissionPopup';
-import HomeVisitsSection from './home/HomeVisitsSection';
-import RecommendedSection from './home/RecommendedSection';
-import { MiniAppId } from '../general/utils/constants';
 import { useIsFocused } from '@react-navigation/native';
-import type { NavigatorScreenParams } from '@react-navigation/native';
 import {
   getLocationPermissionState,
   openAppLocationSettings,
   requestLocationPermission,
 } from '../general/utils/locationPermission';
-import RideOptionsSection from '../apps/rideSharing/components/RideOptionsSection';
-import DeliveryServicesSection from '../apps/rideSharing/components/DeliveryServicesSection';
-import type { RideIntent } from '../apps/rideSharing/utils/rideOptions';
-import type { RideSharingStackParamList } from '../apps/rideSharing/navigation/RideSharingNavigator';
+import HomeTravelBannerSection from './home/HomeTravelBannerSection';
+import OurServicesSection from './home/OurServicesSection';
+import type { SelectMiniAppFn } from '../apps/registry/homeSections/types';
+import { HOME_WIDGETS, type RideIntent } from '../apps/registry/generated/appRegistry';
 
 type Props = {
-  onSelectMiniApp?: (
-    id: MiniAppId,
-    params?: NavigatorScreenParams<RideSharingStackParamList>,
-  ) => void;
+  onSelectMiniApp?: SelectMiniAppFn;
 };
 
 export default function HomeScreen({ onSelectMiniApp }: Props) {
@@ -113,43 +106,55 @@ export default function HomeScreen({ onSelectMiniApp }: Props) {
   }
 
   function handleSelectRideOption(rideIntent: RideIntent) {
-    const isCourier = rideIntent === 'courier';
-
     onSelectMiniApp?.('rideSharing', {
       screen: 'RideSharingHome',
       params: {
         rideType: rideIntent,
-        directCourierOnly: isCourier,
       },
     });
   }
 
-  function handleSelectDeliveryService() {
-    onSelectMiniApp?.('deliveries');
+  function handleSelectDeliveryService(shopTypeId: string) {
+    if (shopTypeId === 'food-delivery') {
+      onSelectMiniApp?.('deliveries');
+      return;
+    }
+
+    onSelectMiniApp?.('deliveries', {
+      screen: 'MultiVendor',
+      params: {
+        screen: 'MainSeeAllScreen',
+        params: {
+          initialShopTypeId: shopTypeId,
+        },
+      },
+    });
   }
 
-  function handleSelectDeliverablesCard() {
-    onSelectMiniApp?.('deliveries');
+  function handleSelectTravelBanner() {
+    handleSelectRideOption('now');
   }
 
-  function handleSelectHomeVisits() {
-    onSelectMiniApp?.('homeVisits');
-  }
+  const RideOptionsSection = HOME_WIDGETS.rideOptions;
+  const DeliveryServicesSection = HOME_WIDGETS.deliveryServices;
+  const RecommendedStoresSection = HOME_WIDGETS.recommendedStores;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <HomeHeader backgroundVariant="solid" />
       <SafeAreaView style={styles.safeArea} edges={['left', 'right', 'bottom']}>
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          <RideOptionsSection onSelectRideOption={handleSelectRideOption} />
-          <DeliveryServicesSection onSelectService={handleSelectDeliveryService} />
-          <HomeVisitsSection onPress={handleSelectHomeVisits} />
-          <RecommendedSection
-            title="Our Deliverables"
-            featureTitle="What We Bring to You"
-            layout="featureCard"
-            onPressFeatureCard={handleSelectDeliverablesCard}
-          />
+          {RideOptionsSection ? (
+            <RideOptionsSection onSelectRideOption={handleSelectRideOption} />
+          ) : null}
+          {DeliveryServicesSection ? (
+            <DeliveryServicesSection onSelectService={handleSelectDeliveryService} />
+          ) : null}
+          {RecommendedStoresSection ? (
+            <RecommendedStoresSection onSelectMiniApp={onSelectMiniApp} />
+          ) : null}
+          <HomeTravelBannerSection onPress={handleSelectTravelBanner} />
+          {/* <OurServicesSection onSelectMiniApp={onSelectMiniApp} /> */}
         </ScrollView>
       </SafeAreaView>
 

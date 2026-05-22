@@ -11,9 +11,11 @@ import { showToast } from '../../../../../general/components/AppToast';
 import { useTheme } from '../../../../../general/theme/theme';
 import { useCartCount } from '../../../hooks/useCart';
 import useAddress from '../../../../../general/hooks/useAddress';
+import useCurrentLocation from '../../../../../general/hooks/useCurrentLocation';
 import useAddressSelectionSheet from '../../../../../general/hooks/useAddressSelectionSheet';
 import useSavedAddresses from '../../../../../general/hooks/useSavedAddresses';
 import useSelectSavedAddress from '../../../../../general/hooks/useSelectSavedAddress';
+import AppSwitcherTopBar from '../../../../../general/components/appSwitch/AppSwitcherTopBar';
 import type { DeliveriesStackParamList } from '../../../navigation/types';
 import SingleVendorCategorySection from '../../components/HomeScreen/SingleVendorCategorySection';
 import SingleVendorDealsSection from '../../components/HomeScreen/SingleVendorDealsSection';
@@ -32,6 +34,7 @@ export default function HomeScreen() {
   } = useSavedAddresses("deliveries");
   const { data: cartCount } = useCartCount();
   const { selectedAddress } = useAddress();
+  const { refreshCurrentLocation } = useCurrentLocation();
   const { selectSavedAddress, selectingAddressId } = useSelectSavedAddress("deliveries");
   const {
     isVisible: isAddressSheetVisible,
@@ -68,21 +71,26 @@ export default function HomeScreen() {
     });
   }, [handleCloseAddressSheet, navigation]);
 
-  const handleUseCurrentLocation = useCallback(() => {
+  const handleUseCurrentLocation = useCallback(async () => {
     handleCloseAddressSheet();
+    const currentLocation = await refreshCurrentLocation();
     navigation.navigate('AddressChooseOnMap', { 
       appPrefix: "deliveries",
+      initialLatitude: currentLocation?.latitude,
+      initialLongitude: currentLocation?.longitude,
       origin: 'single-vendor-home' 
     });
-  }, [handleCloseAddressSheet, navigation]);
+  }, [handleCloseAddressSheet, navigation, refreshCurrentLocation]);
 
   const handleCartPress = useCallback(() => {
     navigation.navigate('Cart');
   }, [navigation]);
 
   return (
-    <View style={[styles.screen, { backgroundColor: colors.background, gap: 10 }]}>
+    <View style={[styles.screen, { backgroundColor: colors.background }]}>
+      <AppSwitcherTopBar activeKey="deliveries" />
       <MultiVendorAddressHeader
+        includeTopInset={false}
         addresses={addresses}
         cartCount={cartCount?.totalItems}
         onAddAddressPress={handleOpenAddressSheet}

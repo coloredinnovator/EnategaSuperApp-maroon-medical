@@ -1,18 +1,100 @@
-import axios, { AxiosError, AxiosInstance, AxiosRequestConfig } from 'axios';
+import axios, { AxiosError, AxiosHeaders, AxiosInstance, AxiosRequestConfig } from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { apiConfig } from '../config/apiConfig';
+import { resetToAuth } from '../navigation/rootNavigation';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 const TOKEN_KEY = 'super_app_auth_token';
 const REFRESH_TOKEN_KEY = 'super_app_refresh_token';
+let isHandlingSessionExpiry = false;
+
+function redirectToAuthWithRetry() {
+  const navigated = resetToAuth();
+  if (navigated) {
+    return;
+  }
+
+  // Navigation container may not be ready at the exact interceptor tick.
+  // Retry briefly to ensure we still land on shared Home.
+  let attempts = 0;
+  const maxAttempts = 8;
+  const timer = setInterval(() => {
+    attempts += 1;
+    const done = resetToAuth();
+    if (done || attempts >= maxAttempts) {
+      clearInterval(timer);
+    }
+  }, 150);
+}
+
+function toLowerCaseMessage(value: unknown): string {
+  if (Array.isArray(value)) {
+    return value
+      .filter((item): item is string => typeof item === 'string')
+      .join(' ')
+      .toLowerCase();
+  }
+
+  if (typeof value === 'string') {
+    return value.toLowerCase();
+  }
+
+  return '';
+}
 
 type ApiErrorResponseData = {
   message?: string | string[];
   code?: string;
   error?: string;
 };
+
+type ExtendedAxiosRequestConfig = AxiosRequestConfig & {
+  skipSessionExpiryHandling?: boolean;
+};
+
+function hasMissingAuthHeaderSignal(responseData?: ApiErrorResponseData): boolean {
+  const messageText = toLowerCaseMessage(responseData?.message);
+  const errorText = toLowerCaseMessage(responseData?.error);
+  const codeText = toLowerCaseMessage(responseData?.code);
+  const combinedAuthText = `${messageText} ${errorText} ${codeText}`.trim();
+
+  return (
+    combinedAuthText.includes('auth header is missing') ||
+    combinedAuthText.includes('authorization header is missing')
+  );
+}
+
+function isLikelyAuthExpiry(status: number, responseData?: ApiErrorResponseData): boolean {
+  const messageText = toLowerCaseMessage(responseData?.message);
+  const errorText = toLowerCaseMessage(responseData?.error);
+  const codeText = toLowerCaseMessage(responseData?.code);
+  const combinedAuthText = `${messageText} ${errorText} ${codeText}`.trim();
+
+  const hasAuthFailureSignal =
+    combinedAuthText.includes('token session expired') ||
+    combinedAuthText.includes('session expired') ||
+    combinedAuthText.includes('invalid token') ||
+    combinedAuthText.includes('token expired') ||
+    combinedAuthText.includes('jwt expired') ||
+    combinedAuthText.includes('auth header is missing') ||
+    combinedAuthText.includes('authorization header is missing') ||
+    combinedAuthText.includes('unauthorized');
+
+  // 401/419/440 are strong authentication/session-expiry signals.
+  if ([401, 419, 440].includes(status)) {
+    return true;
+  }
+
+  // 403 is often business authorization; only treat it as auth-expiry when
+  // backend text also explicitly indicates an expired/invalid session/token.
+  if (status === 403) {
+    return hasAuthFailureSignal;
+  }
+
+  return hasAuthFailureSignal;
+}
 
 // ---------------------------------------------------------------------------
 // Custom error class with typed metadata
@@ -67,16 +149,52 @@ httpClient.interceptors.request.use(async (config) => {
   }
 
   const token = await tokenManager.getToken();
-  console.log('token______',token);
-  
+
   if (token) {
-    config.headers = {
-      ...config.headers,
-      Authorization: `Bearer ${token}`,
-    } as AxiosRequestConfig['headers'];
+    const headers = AxiosHeaders.from(config.headers ?? {});
+    headers.set('Authorization', `Bearer ${token}`);
+    config.headers = headers;
   }
   return config;
 });
+
+httpClient.interceptors.response.use(
+  (response) => response,
+  async (error: unknown) => {
+    if (!axios.isAxiosError(error)) {
+      return Promise.reject(error);
+    }
+
+    const status = error.response?.status ?? 0;
+    const responseData = error.response?.data as ApiErrorResponseData | undefined;
+    const skipSessionExpiryHandling = Boolean(
+      (error.config as AxiosRequestConfig & { skipSessionExpiryHandling?: boolean } | undefined)
+        ?.skipSessionExpiryHandling,
+    );
+    const hasAuthHeader = Boolean(
+      (error.config?.headers as Record<string, unknown> | undefined)?.Authorization,
+    );
+    const storedToken = await tokenManager.getToken();
+    const hasMissingAuthHeaderError = hasMissingAuthHeaderSignal(responseData);
+    const shouldHandleSessionExpiry =
+      !skipSessionExpiryHandling &&
+      isLikelyAuthExpiry(status, responseData) &&
+      (hasAuthHeader || Boolean(storedToken) || hasMissingAuthHeaderError);
+
+    if (shouldHandleSessionExpiry && !isHandlingSessionExpiry) {
+      isHandlingSessionExpiry = true;
+
+      try {
+        await tokenManager.clearAll();
+        redirectToAuthWithRetry();
+      } finally {
+        isHandlingSessionExpiry = false;
+      }
+    }
+
+    return Promise.reject(error);
+  },
+);
 
 function toApiError(error: unknown): ApiError {
   if (axios.isAxiosError(error)) {
@@ -102,6 +220,7 @@ function toApiError(error: unknown): ApiError {
 // Core request wrapper
 // ---------------------------------------------------------------------------
 export type ApiRequestOptions = {
+  skipSessionExpiryHandling?: boolean;
   skipAuth?: boolean;
   headers?: Record<string, string>;
 };
@@ -111,12 +230,14 @@ async function request<T>(
   options: ApiRequestOptions = {},
 ): Promise<T> {
   try {
-    const response = await httpClient.request<T>({
+    const requestConfig: ExtendedAxiosRequestConfig = {
       ...config,
+      skipSessionExpiryHandling: options.skipSessionExpiryHandling,
       headers: options.skipAuth
         ? { ...config.headers, ...options.headers, 'x-skip-auth': '1' }
         : { ...config.headers, ...options.headers },
-    });
+    };
+    const response = await httpClient.request<T>(requestConfig);
     return response.data;
   } catch (error) {
     throw toApiError(error);

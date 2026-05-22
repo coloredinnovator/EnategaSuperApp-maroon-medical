@@ -3,7 +3,6 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { useTheme } from '../../../../general/theme/theme';
 import { mapIntentToCategory, RideCategory, RideIntent } from '../../utils/rideOptions';
 import RideOptionsLayout from '../../components/rideOptions/RideOptionsLayout';
 import { CachedAddress, RideOptionItem } from '../../components/rideOptions/types';
@@ -12,7 +11,6 @@ import type { RideTypeCatalogItem } from '../../api/types';
 import useRecentRideAddresses from '../../hooks/useRecentRideAddresses';
 import { toCachedAddress } from '../../utils/rideAddress';
 import type { RideSharingStackParamList } from '../../navigation/RideSharingNavigator';
-import HamburgerMenu from '../../components/HamburgerMenu';
 import Sidebar, { type UserProfile } from '../../components/Sidebar';
 import { useSidebarMenu } from '../../hooks/useSidebarMenu';
 import { useProfile } from '../../hooks/useProfile';
@@ -23,6 +21,8 @@ import {
   getSavedRideEstimatePaymentMethod,
   saveRideEstimatePaymentMethod,
 } from '../../storage/rideEstimatePaymentMethod';
+import AppSwitcherTopBar from '../../../../general/components/appSwitch/AppSwitcherTopBar';
+import RideTopSearchPanel from '../../components/rideOptions/RideTopSearchPanel';
 
 type RouteParams = {
   rideType?: RideIntent;
@@ -122,7 +122,6 @@ function resolveRideIntentFromSelection(params: {
 
 export default function RideOptionsScreen() {
   const { t } = useTranslation('rideSharing');
-  const { colors } = useTheme();
   const navigation = useNavigation<NativeStackNavigationProp<RideSharingStackParamList>>();
   const { userProfile: apiProfile } = useProfile();
   const route = useRoute();
@@ -154,15 +153,7 @@ export default function RideOptionsScreen() {
     () => (rideTypesQuery.data ?? []).map(toRideOption),
     [rideTypesQuery.data],
   );
-  const visibleRideOptions = useMemo(() => {
-    if (!directCourierOnly) {
-      return prioritizeRideOptionsForHeader(rideOptions);
-    }
-
-    const courierOnlyOptions = rideOptions.filter((option) => option.title.toLowerCase().includes('courier'));
-    const options = courierOnlyOptions.length ? courierOnlyOptions : rideOptions;
-    return prioritizeRideOptionsForHeader(options);
-  }, [directCourierOnly, rideOptions]);
+  const visibleRideOptions = useMemo(() => prioritizeRideOptionsForHeader(rideOptions), [rideOptions]);
   const resolvedRideType = useMemo(
     () => resolveRideIntentFromSelection({
       rideOptions: visibleRideOptions,
@@ -216,15 +207,15 @@ export default function RideOptionsScreen() {
 
     const serializedPrefilledFromAddress = prefilledFromAddress
       ? {
-          placeId: prefilledFromAddress.placeId,
-          description: prefilledFromAddress.description,
-          structuredFormatting: {
-            mainText: prefilledFromAddress.structuredFormatting.mainText,
-            secondaryText: prefilledFromAddress.structuredFormatting.secondaryText,
-          },
-          types: prefilledFromAddress.types,
-          coordinates: prefilledFromAddress.coordinates,
-        }
+        placeId: prefilledFromAddress.placeId,
+        description: prefilledFromAddress.description,
+        structuredFormatting: {
+          mainText: prefilledFromAddress.structuredFormatting.mainText,
+          secondaryText: prefilledFromAddress.structuredFormatting.secondaryText,
+        },
+        types: prefilledFromAddress.types,
+        coordinates: prefilledFromAddress.coordinates,
+      }
       : undefined;
 
     navigation.navigate(
@@ -251,6 +242,7 @@ export default function RideOptionsScreen() {
   }, [navigation]);
 
   const rideTypesErrorMessage = rideTypesQuery.error?.message || null;
+  const switcherActiveKey = resolvedRideType === 'courier' ? 'courier' : 'ride';
   const userProfile = useMemo<UserProfile | undefined>(() => {
     if (!apiProfile) return undefined;
 
@@ -263,6 +255,13 @@ export default function RideOptionsScreen() {
 
   return (
     <View style={styles.container}>
+      <AppSwitcherTopBar
+        activeKey={switcherActiveKey}
+        overlayOnMap
+        expandedContent={(
+          <RideTopSearchPanel onOpenSidebar={openSidebar} onSelectAddress={handleSearchPress} />
+        )}
+      />
       <RideOptionsLayout
         rideOptions={visibleRideOptions}
         cachedAddresses={cachedAddresses}
@@ -276,16 +275,6 @@ export default function RideOptionsScreen() {
           void rideTypesQuery.refetch();
         }}
         isDirectCourierFlow={directCourierOnly}
-      />
-
-      <HamburgerMenu
-        onPress={openSidebar}
-        style={{
-          ...styles.hamburger,
-          backgroundColor: colors.surface,
-          borderColor: colors.border,
-          shadowColor: colors.shadowColor,
-        }}
       />
 
       <Sidebar
@@ -314,17 +303,5 @@ export default function RideOptionsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  hamburger: {
-    position: 'absolute',
-    right: 16,
-    top: 65,
-    zIndex: 10,
-    borderWidth: 1,
-    borderRadius: 12,
-    shadowOpacity: 0.14,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 6,
   },
 });

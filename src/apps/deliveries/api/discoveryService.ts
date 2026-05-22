@@ -9,6 +9,8 @@ import type {
     DeliveryNearbyStore,
     DeliveryNearbyStoresApiResponse,
     DeliveryNearbyStoresParams,
+    DeliveryRecommendedStoresApiResponse,
+    DeliveryRecommendedStoresParams,
     DeliveryStoreProductsApiResponse,
     DeliveryStoreProductsParams,
     DeliveryStoreViewApiResponse,
@@ -37,6 +39,11 @@ const NEARBY_STORES_DEFAULTS = {
     limit: 10,
     latitude: 33.7039543,
     longitude: 72.9680349,
+} as const;
+
+const RECOMMENDED_STORES_DEFAULTS = {
+    offset: 0,
+    limit: 10,
 } as const;
 
 const DEALS_DEFAULTS = {
@@ -169,7 +176,9 @@ function toNearbyStoresQueryParams(
         latitude = NEARBY_STORES_DEFAULTS.latitude,
         longitude = NEARBY_STORES_DEFAULTS.longitude,
         stock,
+        category_id,
         category_ids,
+        shop_type_id,
         subcategory_id,
         price_tiers,
         sort_by,
@@ -182,10 +191,60 @@ function toNearbyStoresQueryParams(
         latitude,
         longitude,
         stock,
+        category_id,
         category_ids,
+        shop_type_id,
         subcategory_id,
         price_tiers,
         sort_by,
+    };
+}
+
+function toDealsQueryParams(
+    params: DeliveryDealsParams = {},
+): Record<string, unknown> {
+    const {
+        offset = DEALS_DEFAULTS.offset,
+        limit = DEALS_DEFAULTS.limit,
+        search,
+        category_id,
+        category_ids,
+        subcategory_id,
+        shop_type_id,
+    } = params;
+
+    return {
+        offset,
+        limit,
+        search,
+        category_id,
+        category_ids,
+        subcategory_id,
+        shop_type_id,
+    };
+}
+
+function toOrderAgainQueryParams(
+    params: DeliveryOrderAgainParams = {},
+): Record<string, unknown> {
+    const {
+        offset = ORDER_AGAIN_DEFAULTS.offset,
+        limit = ORDER_AGAIN_DEFAULTS.limit,
+        search,
+        category_id,
+        category_ids,
+        subcategory_id,
+        shop_type_id,
+    } = params;
+
+    return {
+        offset,
+        limit,
+        search,
+        category_id,
+        category_ids,
+        subcategory_id,
+        shop_type_id,
     };
 }
 
@@ -371,6 +430,36 @@ export const discoveryService = {
         }
     },
 
+    /** Fetch available deliveries shop types for guest/public mode. */
+    getPublicShopTypes: async (
+        params: DeliveryShopTypesParams = {},
+    ): Promise<DeliveryShopType[]> => {
+        const { offset = 0, limit = 10 } = params;
+        try {
+            const response = await apiClient.get<DeliveryShopTypesApiResponse>(
+                '/api/v1/apps/deliveries/discovery/public/shop-types',
+                { offset, limit },
+            );
+
+            if (Array.isArray(response)) {
+                return response;
+            }
+
+            if (isPaginatedShopTypesResponse(response)) {
+                return response.items;
+            }
+
+            if (isWrappedShopTypesResponse(response)) {
+                return response.data;
+            }
+
+            return [];
+        } catch (error) {
+            console.error('public shop types request failed', error);
+            throw error;
+        }
+    },
+
     /** Fetch paginated deliveries shop types for app discovery. */
     getShopTypesPage: async (
         params: DeliveryShopTypesParams = {},
@@ -503,12 +592,9 @@ export const discoveryService = {
         params: DeliveryBannersParams = {},
     ): Promise<DeliveryBanner[]> => {
         const { offset = 0, limit = 10 } = params;
-        try {
-            const response = await apiClient.get<DeliveryBannersApiResponse>(
-                '/api/v1/deliveries/banners/mobile',
-                { offset, limit },
-            );
+        const query = { offset, limit };
 
+        const parseBanners = (response: DeliveryBannersApiResponse): DeliveryBanner[] => {
             if (Array.isArray(response)) {
                 return response;
             }
@@ -522,9 +608,30 @@ export const discoveryService = {
             }
 
             return [];
-        } catch (error) {
-            console.error('mobile banners request failed', error);
-            throw error;
+        };
+
+        try {
+            const response = await apiClient.get<DeliveryBannersApiResponse>(
+                '/api/v1/apps/deliveries/banners/mobile',
+                query,
+            );
+
+            return parseBanners(response);
+        } catch (primaryError) {
+            try {
+                const fallbackResponse = await apiClient.get<DeliveryBannersApiResponse>(
+                    '/api/v1/deliveries/banners/mobile',
+                    query,
+                );
+
+                return parseBanners(fallbackResponse);
+            } catch (fallbackError) {
+                console.error('mobile banners request failed', {
+                    fallbackError,
+                    primaryError,
+                });
+                throw fallbackError;
+            }
         }
     },
 
@@ -612,17 +719,53 @@ export const discoveryService = {
         }
     },
 
+    /** Fetch recommended stores for deliveries discovery. */
+    getRecommendedStoresPage: async (
+        params: DeliveryRecommendedStoresParams = {},
+    ): Promise<PaginatedDeliveryResponse<DeliveryNearbyStore>> => {
+        const {
+            offset = RECOMMENDED_STORES_DEFAULTS.offset,
+            limit = RECOMMENDED_STORES_DEFAULTS.limit,
+            latitude,
+            longitude,
+            sort_by,
+        } = params;
+
+        try {
+            const response = await apiClient.get<DeliveryRecommendedStoresApiResponse>(
+                '/api/v1/apps/deliveries/discovery/public/recommended-stores',
+                {
+                    offset,
+                    limit,
+                    latitude,
+                    longitude,
+                    sort_by,
+                },
+            );
+
+            return toPaginatedResponse(response, { offset, limit });
+        } catch (error) {
+            console.error('recommended stores request failed', error);
+            throw error;
+        }
+    },
+
     /** Fetch store view metadata for a specific deliveries store. */
     getStoreView: async (
         storeId: string,
     ): Promise<DeliveryStoreViewApiResponse> => {
         try {
+            console.log('[deliveries][getStoreView] request', { storeId });
             const response = await apiClient.get<DeliveryStoreViewApiResponse>(
                 `/api/v1/apps/deliveries/stores/${storeId}/view`,
             );
+            console.log('[deliveries][getStoreView] response', {
+                storeId,
+                response,
+            });
             return response;
         } catch (error) {
-            console.error('store view request failed', error);
+            console.error('store view request failed', { storeId, error });
             throw error;
         }
     },
@@ -641,7 +784,15 @@ export const discoveryService = {
         } = params;
 
         try {
-            return await apiClient.get<DeliveryStoreProductsApiResponse>(
+            console.log('[deliveries][getStoreProducts] request', {
+                storeId,
+                offset,
+                limit,
+                search,
+                selectedCategoryId,
+                selectedSubcategoryId,
+            });
+            const response = await apiClient.get<DeliveryStoreProductsApiResponse>(
                 `/api/v1/apps/deliveries/stores/${storeId}/view/products`,
                 {
                     offset,
@@ -651,8 +802,23 @@ export const discoveryService = {
                     subcategoryId: selectedSubcategoryId,
                 },
             );
+            console.log('[deliveries][getStoreProducts] response', {
+                storeId,
+                offset,
+                limit,
+                response,
+            });
+            return response;
         } catch (error) {
-            console.error('store products request failed', error);
+            console.error('store products request failed', {
+                storeId,
+                offset,
+                limit,
+                search,
+                selectedCategoryId,
+                selectedSubcategoryId,
+                error,
+            });
             throw error;
         }
     },
@@ -669,12 +835,20 @@ export const discoveryService = {
     getDealsPage: async (
         params: DeliveryDealsParams = {},
     ): Promise<PaginatedDeliveryResponse<DeliveryNearbyStore>> => {
-        const { offset = DEALS_DEFAULTS.offset, limit = DEALS_DEFAULTS.limit } = params;
+        const queryParams = toDealsQueryParams(params);
+        const offset =
+            typeof queryParams.offset === 'number'
+                ? queryParams.offset
+                : DEALS_DEFAULTS.offset;
+        const limit =
+            typeof queryParams.limit === 'number'
+                ? queryParams.limit
+                : DEALS_DEFAULTS.limit;
 
         try {
             const response = await apiClient.get<DeliveryDealsApiResponse>(
                 '/api/v1/apps/deliveries/deals/home',
-                { offset, limit },
+                queryParams,
             );
 
             return toPaginatedResponse(response, { offset, limit });
@@ -688,15 +862,12 @@ export const discoveryService = {
     getOrderAgain: async (
         params: DeliveryOrderAgainParams = {},
     ): Promise<DeliveryOrderAgainItem[]> => {
-        const {
-            offset = ORDER_AGAIN_DEFAULTS.offset,
-            limit = ORDER_AGAIN_DEFAULTS.limit,
-        } = params;
+        const queryParams = toOrderAgainQueryParams(params);
 
         try {
             const response = await apiClient.get<DeliveryOrderAgainApiResponse>(
                 '/api/v1/apps/deliveries/discovery/order-again',
-                { offset, limit },
+                queryParams,
             );
 
             if (Array.isArray(response)) {

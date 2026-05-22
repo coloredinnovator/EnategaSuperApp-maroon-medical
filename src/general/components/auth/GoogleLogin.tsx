@@ -9,10 +9,16 @@ import Svg from "../Svg";
 import { useTheme } from "../../theme/theme";
 import { useTranslation } from "react-i18next";
 import type { ApiError } from "../../api/apiClient";
+import { getExpoPushTokenForAuth } from "../../services/notifications/expoPushTokenService";
 
-const clientId = process.env.EXPO_PUBLIC_IOS_CLIENT_ID;
+const iosClientId = process.env.EXPO_PUBLIC_IOS_CLIENT_ID;
+const webClientId =
+  process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
+  ?? process.env.EXPO_PUBLIC_ANDROID_OAUTH_CLIENT_ID;
+
 GoogleSignin.configure({
-  iosClientId: clientId,
+  iosClientId,
+  webClientId,
 });
 
 const GoogleLogin = () => {
@@ -67,10 +73,12 @@ const GoogleLogin = () => {
         return;
       }
 
+      const devicePushToken = await getExpoPushTokenForAuth();
+
       googleLoginMutation.mutate({
         idToken,
         user_type: "Customer",
-        device_push_token: "",
+        device_push_token: devicePushToken ?? undefined,
       });
     } catch (error: any) {
       if (error?.code === "SIGN_IN_CANCELLED") return;

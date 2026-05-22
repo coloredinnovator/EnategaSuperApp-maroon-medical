@@ -5,7 +5,7 @@ import { useTheme } from '../theme/theme';
 
 type Props = {
   title: string;
-  actionLabel: string;
+  actionLabel?: string;
   onActionPress?: () => void;
   style?: StyleProp<ViewStyle>;
 };
@@ -31,28 +31,31 @@ export default function SectionActionHeader({
         {title}
       </Text>
 
-      <Pressable
-        accessibilityRole="button"
-        onPress={onActionPress}
-        style={[
-          styles.actionButton,
-          {
-            backgroundColor: colors.blue100,
-            shadowColor: colors.shadowColor,
-          },
-        ]}
-      >
-        <Text
-          weight="medium"
-          style={{
-            color: colors.text,
-            fontSize: typography.size.sm2,
-            lineHeight: 22,
-          }}
+      {actionLabel ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={onActionPress}
+          style={[
+            styles.actionButton,
+            {
+              backgroundColor: colors.blue100,
+              shadowColor: colors.shadowColor,
+            },
+          ]}
         >
-          {actionLabel}
-        </Text>
-      </Pressable>
+          <Text
+            weight="medium"
+            style={{
+              color: colors.text,
+              fontSize: typography.size.sm2,
+              lineHeight: 22,
+              fontWeight: '700',
+            }}
+          >
+            {actionLabel}
+          </Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -65,7 +68,7 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     alignItems: 'center',
-    borderRadius: 999,
+    borderRadius: 5,
     justifyContent: 'center',
     minHeight: 30,
     minWidth: 76,

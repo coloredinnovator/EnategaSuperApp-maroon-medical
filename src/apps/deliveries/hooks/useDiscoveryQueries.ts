@@ -8,14 +8,19 @@ import {
   type UseQueryResult,
 } from '@tanstack/react-query';
 import { ApiError } from '../../../general/api/apiClient';
+import { categoriesServices } from '../api/categoriesServices';
+import type { DeliveryShopTypeCategory } from '../api/categoriesServicesTypes';
 import { discoveryService } from '../api/discoveryService';
 import { deliveryKeys } from '../api/queryKeys';
 import type { GenericListFilters } from '../components/filters/types';
 import useAddress from '../../../general/hooks/useAddress';
 import type {
   DeliveryBanner,
+  DeliveryDealsParams,
   DeliveryNearbyStore,
   DeliveryOrderAgainItem,
+  DeliveryRecommendedStoresParams,
+  DeliveryOrderAgainParams,
   DeliveryShopTypeStoresParams,
   DeliveryStoreProductsApiResponse,
   DeliveryStoreProductsParams,
@@ -74,6 +79,12 @@ type UseNearbyStoresOptions = {
   >;
 };
 
+type UseRecommendedStoresOptions = {
+  mode?: UseNearbyStoresMode;
+  enabled?: boolean;
+  requestParams?: Omit<DeliveryRecommendedStoresParams, 'offset' | 'limit'>;
+};
+
 type UseStoreViewOptions = Omit<
   UseQueryOptions<DeliveryStoreViewApiResponse, ApiError>,
   'queryKey' | 'queryFn'
@@ -97,10 +108,14 @@ type UseDealsOptions = Omit<
   'queryKey' | 'queryFn'
 >;
 
+type UseDealsParams = DeliveryDealsParams;
+
 type UseOrderAgainOptions = Omit<
   UseQueryOptions<DeliveryOrderAgainItem[], ApiError>,
   'queryKey' | 'queryFn'
 >;
+
+type UseOrderAgainParams = DeliveryOrderAgainParams;
 
 type UseStoreRecommendedProductsOptions = Omit<
   UseQueryOptions<DeliveryOrderAgainItem[], ApiError>,
@@ -142,6 +157,13 @@ type UseShopTypeStoresOptions = {
   >;
 };
 
+type UseShopTypeCategoriesMode = 'preview' | 'paginated';
+
+type UseShopTypeCategoriesOptions = {
+  mode?: UseShopTypeCategoriesMode;
+  enabled?: boolean;
+};
+
 type UseVendorStoresMode = 'preview' | 'paginated';
 
 type UseVendorStoresOptions = {
@@ -162,9 +184,6 @@ type ShopTypeStoresSectionResult = UseQueryResult<
   shopType: DeliveryShopType;
 };
 
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
 function normalizeCategoryIds(categorySelections?: string[]) {
   if (!categorySelections?.length) {
     return undefined;
@@ -173,7 +192,7 @@ function normalizeCategoryIds(categorySelections?: string[]) {
   const validCategoryIds = categorySelections
     .map((categorySelection) => categorySelection.trim())
     .filter(Boolean)
-    .filter((categoryId) => UUID_PATTERN.test(categoryId));
+    .filter((categoryId) => categoryId.length > 0);
 
   return validCategoryIds.length > 0 ? Array.from(new Set(validCategoryIds)) : undefined;
 }
@@ -207,6 +226,15 @@ export function useShopTypes(options?: UseShopTypesOptions) {
   return useQuery<DeliveryShopType[], ApiError>({
     queryKey: deliveryKeys.shopTypes(),
     queryFn: () => discoveryService.getShopTypes(),
+    staleTime: 5 * 60 * 1000,
+    ...options,
+  });
+}
+
+export function usePublicShopTypes(options?: UseShopTypesOptions) {
+  return useQuery<DeliveryShopType[], ApiError>({
+    queryKey: deliveryKeys.publicShopTypes({ limit: 10 }),
+    queryFn: () => discoveryService.getPublicShopTypes({ limit: 10 }),
     staleTime: 5 * 60 * 1000,
     ...options,
   });
@@ -260,9 +288,7 @@ export function useShopTypeProducts(
     latitude: options?.requestParams?.latitude ?? latitude,
     longitude: options?.requestParams?.longitude ?? longitude,
     category_ids: normalizeCategoryIds(options?.filters?.category_ids),
-    price_tiers: options?.filters?.price_tiers
-      ? [options.filters.price_tiers]
-      : undefined,
+    price_tiers: options?.filters?.price_tiers ?? undefined,
     stock: normalizeStockValue(options?.filters?.stock),
     sort_by: options?.filters?.sort_by ?? undefined,
   };
@@ -321,9 +347,7 @@ export function useShopTypeStores(
     latitude: options?.requestParams?.latitude ?? latitude,
     longitude: options?.requestParams?.longitude ?? longitude,
     category_ids: normalizeCategoryIds(options?.filters?.category_ids),
-    price_tiers: options?.filters?.price_tiers
-      ? [options.filters.price_tiers]
-      : undefined,
+    price_tiers: options?.filters?.price_tiers ?? undefined,
     stock: normalizeStockValue(options?.filters?.stock),
     sort_by: options?.filters?.sort_by ?? undefined,
   };
@@ -367,6 +391,41 @@ export function useShopTypeStores(
   };
 }
 
+export function useShopTypeCategories(
+  shopTypeId: string,
+  options?: UseShopTypeCategoriesOptions,
+) {
+  const mode = options?.mode ?? 'preview';
+  const limit = 10;
+  const query = useInfiniteQuery<
+    PaginatedDeliveryResponse<DeliveryShopTypeCategory>,
+    ApiError
+  >({
+    queryKey: deliveryKeys.shopTypeCategories(shopTypeId, 0, limit),
+    queryFn: ({ pageParam = 0 }) =>
+      categoriesServices.getShopTypeCategoriesPage({
+        shopTypeId,
+        offset: pageParam as number,
+        limit,
+      }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) =>
+      lastPage.isEnd ? undefined : (lastPage.nextOffset ?? undefined),
+    staleTime: 5 * 60 * 1000,
+    enabled: (options?.enabled ?? true) && Boolean(shopTypeId),
+  });
+
+  const items = query.data?.pages.flatMap((page) => page.items) ?? [];
+
+  return {
+    ...query,
+    data: mode === 'preview' ? items.slice(0, limit) : items,
+    totalCount: query.data?.pages.length
+      ? query.data.pages[query.data.pages.length - 1]?.total
+      : undefined,
+  };
+}
+
 export function useVendorStores(
   vendorId: string,
   options?: UseVendorStoresOptions,
@@ -382,9 +441,7 @@ export function useVendorStores(
     latitude: options?.requestParams?.latitude ?? latitude,
     longitude: options?.requestParams?.longitude ?? longitude,
     category_ids: normalizeCategoryIds(options?.filters?.category_ids),
-    price_tiers: options?.filters?.price_tiers
-      ? [options.filters.price_tiers]
-      : undefined,
+    price_tiers: options?.filters?.price_tiers ?? undefined,
     stock: normalizeStockValue(options?.filters?.stock),
     sort_by: options?.filters?.sort_by ?? undefined,
   };
@@ -533,9 +590,7 @@ export function useNearbyStores(options?: UseNearbyStoresOptions) {
     latitude: options?.requestParams?.latitude ?? latitude,
     longitude: options?.requestParams?.longitude ?? longitude,
     category_ids: normalizeCategoryIds(options?.filters?.category_ids),
-    price_tiers: options?.filters?.price_tiers
-      ? [options.filters.price_tiers]
-      : undefined,
+    price_tiers: options?.filters?.price_tiers ?? undefined,
     stock: normalizeStockValue(options?.filters?.stock),
     sort_by: options?.filters?.sort_by ?? undefined,
   };
@@ -545,7 +600,17 @@ export function useNearbyStores(options?: UseNearbyStoresOptions) {
     ApiError
   >({
     queryKey: [
-      ...deliveryKeys.nearbyStores(),
+      ...deliveryKeys.nearbyStores({
+        limit,
+        search: options?.search?.trim() ?? '',
+        category_id: nearbyStoreParams.category_id,
+        category_ids: nearbyStoreParams.category_ids,
+        shop_type_id: nearbyStoreParams.shop_type_id,
+        subcategory_id: nearbyStoreParams.subcategory_id,
+        stock: nearbyStoreParams.stock,
+        price_tiers: nearbyStoreParams.price_tiers,
+        sort_by: nearbyStoreParams.sort_by,
+      }),
       {
         filters: options?.filters,
         mode,
@@ -554,13 +619,16 @@ export function useNearbyStores(options?: UseNearbyStoresOptions) {
         search: options?.search?.trim() ?? '',
       },
     ],
-    queryFn: ({ pageParam = 0 }) =>
-      discoveryService.getNearbyStoresPage({
+    queryFn: ({ pageParam = 0 }) => {
+      const requestPayload = {
         offset: pageParam as number,
         limit,
         search: options?.search?.trim() || undefined,
         ...nearbyStoreParams,
-      } satisfies DeliveryNearbyStoresParams),
+      } satisfies DeliveryNearbyStoresParams;
+      console.log('[deliveries-filters] nearby-request', requestPayload);
+      return discoveryService.getNearbyStoresPage(requestPayload);
+    },
     initialPageParam: 0,
     getNextPageParam: (lastPage) =>
       lastPage.isEnd ? undefined : (lastPage.nextOffset ?? undefined),
@@ -570,6 +638,56 @@ export function useNearbyStores(options?: UseNearbyStoresOptions) {
 
   const items =
     query.data?.pages.flatMap((page) => page.items) ?? [];
+
+  return {
+    ...query,
+    data: mode === 'preview' ? items.slice(0, limit) : items,
+    totalCount: query.data?.pages.length
+      ? query.data.pages[query.data.pages.length - 1]?.total
+      : undefined,
+  };
+}
+
+export function useRecommendedStores(options?: UseRecommendedStoresOptions) {
+  const mode = options?.mode ?? 'preview';
+  const limit = 10;
+  const { latitude, longitude } = useDiscoveryCoordinates();
+  const recommendedStoreParams: Omit<
+    DeliveryRecommendedStoresParams,
+    'offset' | 'limit'
+  > = {
+    ...options?.requestParams,
+    latitude: options?.requestParams?.latitude ?? latitude,
+    longitude: options?.requestParams?.longitude ?? longitude,
+    sort_by: options?.requestParams?.sort_by ?? 'recommended',
+  };
+
+  const query = useInfiniteQuery<
+    PaginatedDeliveryResponse<DeliveryNearbyStore>,
+    ApiError
+  >({
+    queryKey: [
+      ...deliveryKeys.recommendedStores(),
+      {
+        mode,
+        limit,
+        requestParams: recommendedStoreParams,
+      },
+    ],
+    queryFn: ({ pageParam = 0 }) =>
+      discoveryService.getRecommendedStoresPage({
+        offset: pageParam as number,
+        limit,
+        ...recommendedStoreParams,
+      }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) =>
+      lastPage.isEnd ? undefined : (lastPage.nextOffset ?? undefined),
+    enabled: options?.enabled ?? true,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const items = query.data?.pages.flatMap((page) => page.items) ?? [];
 
   return {
     ...query,
@@ -634,19 +752,39 @@ export function useStoreProducts(
   });
 }
 
-export function useDeals(options?: UseDealsOptions) {
+export function useDeals(
+  params: UseDealsParams = {},
+  options?: UseDealsOptions,
+) {
   return useQuery<DeliveryNearbyStore[], ApiError>({
-    queryKey: deliveryKeys.deals(),
-    queryFn: () => discoveryService.getDeals(),
+    queryKey: deliveryKeys.deals({
+      limit: params.limit,
+      search: params.search,
+      category_id: params.category_id,
+      category_ids: params.category_ids,
+      shop_type_id: params.shop_type_id,
+      subcategory_id: params.subcategory_id,
+    }),
+    queryFn: () => discoveryService.getDeals(params),
     // staleTime: 5 * 60 * 1000,
     ...options,
   });
 }
 
-export function useOrderAgain(options?: UseOrderAgainOptions) {
+export function useOrderAgain(
+  params: UseOrderAgainParams = {},
+  options?: UseOrderAgainOptions,
+) {
   return useQuery<DeliveryOrderAgainItem[], ApiError>({
-    queryKey: deliveryKeys.orderAgain(),
-    queryFn: () => discoveryService.getOrderAgain(),
+    queryKey: deliveryKeys.orderAgain({
+      limit: params.limit,
+      search: params.search,
+      category_id: params.category_id,
+      category_ids: params.category_ids,
+      shop_type_id: params.shop_type_id,
+      subcategory_id: params.subcategory_id,
+    }),
+    queryFn: () => discoveryService.getOrderAgain(params),
     ...options,
   });
 }

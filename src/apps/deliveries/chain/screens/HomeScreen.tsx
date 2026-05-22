@@ -9,6 +9,7 @@ import MultiVendorAddressHeader from '../../components/MultiVendorAddressHeader'
 import type { ProfileAddress } from '../../../../general/api/profileService';
 import { useAddress } from '../../hooks';
 import useAddressSelectionSheet from '../../../../general/hooks/useAddressSelectionSheet';
+import useCurrentLocation from '../../../../general/hooks/useCurrentLocation';
 import useSavedAddresses from '../../../../general/hooks/useSavedAddresses';
 import useSelectSavedAddress from '../../../../general/hooks/useSelectSavedAddress';
 import type { DeliveriesStackParamList } from '../../navigation/types';
@@ -21,6 +22,7 @@ import ChainSpecialOffersBanner from '../components/homeScreen/ChainSpecialOffer
 import type { ChainMenuTemplate } from '../api/types';
 import useChainMenuTemplates from '../hooks/useChainMenuTemplates';
 import { useChainMenuStore } from '../stores/useChainMenuStore';
+import AppSwitcherTopBar from '../../../../general/components/appSwitch/AppSwitcherTopBar';
 
 type Props = Record<string, never>;
 
@@ -36,6 +38,7 @@ export default function HomeScreen({}: Props) {
     refetch,
   } = useSavedAddresses("deliveries");
   const { selectedAddress } = useAddress();
+  const { refreshCurrentLocation } = useCurrentLocation();
   const { selectSavedAddress, selectingAddressId } = useSelectSavedAddress("deliveries");
   const {
     data: menuTemplates,
@@ -107,21 +110,26 @@ export default function HomeScreen({}: Props) {
     });
   }, [handleCloseAddressSheet, navigation]);
 
-  const handleUseCurrentLocation = useCallback(() => {
+  const handleUseCurrentLocation = useCallback(async () => {
     handleCloseAddressSheet();
+    const currentLocation = await refreshCurrentLocation();
     navigation.navigate('AddressChooseOnMap', { 
       appPrefix: "deliveries",
+      initialLatitude: currentLocation?.latitude,
+      initialLongitude: currentLocation?.longitude,
       origin: 'chain-home' 
     });
-  }, [handleCloseAddressSheet, navigation]);
+  }, [handleCloseAddressSheet, navigation, refreshCurrentLocation]);
 
   const handleTemplateSelect = useCallback((template: ChainMenuTemplate) => {
     setSelectedMenuTemplateId(template.id);
   }, [setSelectedMenuTemplateId]);
 
   return (
-    <View style={[styles.screen, { backgroundColor: colors.background, gap: 10 }]}>
+    <View style={[styles.screen, { backgroundColor: colors.background }]}>
+      <AppSwitcherTopBar activeKey="deliveries" />
       <MultiVendorAddressHeader
+        includeTopInset={false}
         addressVariant="label"
         addresses={addresses}
         onAddAddressPress={handleOpenAddressSheet}

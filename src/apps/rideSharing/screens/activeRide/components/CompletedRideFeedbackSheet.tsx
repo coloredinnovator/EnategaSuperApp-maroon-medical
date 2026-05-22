@@ -1,5 +1,6 @@
 import React, { memo, useMemo, useState } from 'react';
 import {
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -40,11 +41,21 @@ function CompletedRideFeedbackSheet({
   const { t } = useTranslation('rideSharing');
   const insets = useSafeAreaInsets();
   const [rating, setRating] = useState(0);
-  const [feedback, setFeedback] = useState('');
+  const [customFeedback, setCustomFeedback] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const isCourierFlow = isCourierRideRequest(feedbackRide.rawRideData?.ride_type?.name)
     || isCourierRideRequest(feedbackRide.rawRideData?.ride_type?.id)
     || Boolean(feedbackRide.rawRideData?.courierDetail);
+
+  console.log('[RatingFlow][Sheet] CompletedRideFeedbackSheet render data', {
+    rideId: feedbackRide.rideId,
+    driverUserId: feedbackRide.driverUserId,
+    driverName: feedbackRide.driverName,
+    driverAvatarUri: feedbackRide.driverAvatarUri,
+    rawDriverUserProfile: feedbackRide.rawRideData?.driver?.user?.profile,
+    rawDriverProfileFallback: (feedbackRide.rawRideData?.driver as unknown as Record<string, unknown> | undefined)?.profile,
+    rawRiderInfoProfile: feedbackRide.rawRideData?.riderInfo?.profile,
+  });
   const feedbackTags = useMemo(
     () => [
       'ride_feedback_tag_good_music',
@@ -61,6 +72,14 @@ function CompletedRideFeedbackSheet({
     () => rating <= 0 || isSubmitting,
     [isSubmitting, rating],
   );
+  const selectedTagLabels = useMemo(
+    () => selectedTags.map((tag) => t(tag)).join(', '),
+    [selectedTags, t],
+  );
+  const prefixedFeedback = useMemo(
+    () => [selectedTagLabels, customFeedback.trim()].filter(Boolean).join('. '),
+    [customFeedback, selectedTagLabels],
+  );
 
   const toggleTag = (tag: string) => {
     setSelectedTags((previous) => (
@@ -75,12 +94,9 @@ function CompletedRideFeedbackSheet({
       return;
     }
 
-    const selectedTagLabels = selectedTags.map((tag) => t(tag)).join(', ');
-    const composedFeedback = [selectedTagLabels, feedback.trim()].filter(Boolean).join('. ');
-
     onSubmit({
       rating,
-      feedback: composedFeedback,
+      feedback: prefixedFeedback,
     });
   };
 
@@ -106,6 +122,21 @@ function CompletedRideFeedbackSheet({
         handle={<BottomSheetHandle color={colors.findingRideHandle} />}
       >
         <View style={[styles.content, { paddingBottom: insets.bottom + 18 }]}>
+          <View style={styles.driverInfoRow}>
+            {feedbackRide.driverAvatarUri ? (
+              <Image
+                source={{ uri: feedbackRide.driverAvatarUri }}
+                style={[styles.driverAvatar, { borderColor: colors.surfaceSoft }]}
+              />
+            ) : (
+              <View style={[styles.driverAvatar, styles.driverAvatarFallback, { backgroundColor: colors.gray200, borderColor: colors.surfaceSoft }]}>
+                <Text weight="extraBold" style={[styles.driverInitial, { color: colors.text }]}>
+                  {(feedbackRide.driverName ?? 'D').slice(0, 1).toUpperCase()}
+                </Text>
+              </View>
+            )}
+          </View>
+
           <Text weight="extraBold" style={[styles.title, { color: colors.text }]}>
             {isCourierFlow ? t('ride_feedback_courier_title') : t('ride_feedback_title')}
           </Text>
@@ -152,8 +183,26 @@ function CompletedRideFeedbackSheet({
             multiline
             placeholder={t('ride_feedback_placeholder')}
             placeholderTextColor={colors.iconDisabled}
-            value={feedback}
-            onChangeText={setFeedback}
+            value={prefixedFeedback}
+            onChangeText={(nextValue) => {
+              if (!selectedTagLabels) {
+                setCustomFeedback(nextValue);
+                return;
+              }
+
+              const tagPrefixWithDivider = `${selectedTagLabels}. `;
+              if (nextValue.startsWith(tagPrefixWithDivider)) {
+                setCustomFeedback(nextValue.slice(tagPrefixWithDivider.length));
+                return;
+              }
+
+              if (nextValue === selectedTagLabels) {
+                setCustomFeedback('');
+                return;
+              }
+
+              setCustomFeedback(nextValue);
+            }}
             textAlignVertical="top"
             style={[
               styles.input,
@@ -220,15 +269,35 @@ const styles = StyleSheet.create({
     lineHeight: 38,
     textAlign: 'center',
     letterSpacing: -0.48,
-    marginBottom: 8,
+    marginBottom: 10,
   },
   subtitle: {
     fontSize: 14,
     lineHeight: 22,
-    marginBottom: 16,
+    marginBottom: 18,
+    textAlign: 'center',
   },
   starsRow: {
+    marginBottom: 18,
+  },
+  driverInfoRow: {
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 14,
+  },
+  driverAvatar: {
+    borderRadius: 36,
+    borderWidth: 2,
+    height: 72,
+    width: 72,
+  },
+  driverAvatarFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  driverInitial: {
+    fontSize: 26,
+    lineHeight: 30,
   },
   tagChip: {
     borderRadius: 999,

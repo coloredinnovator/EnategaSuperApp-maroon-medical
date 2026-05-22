@@ -134,7 +134,7 @@ export default function RideEstimateScreen() {
     rideCategory ?? (mappedOptions[0]?.id ?? 'ride'),
   );
   const [customFare, setCustomFare] = useState<number | undefined>(initialOfferedFare);
-  const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState<PaymentMethodId | null>(null);
+  const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState<PaymentMethodId | null>('cash');
   const [isPaymentMethodVisible, setIsPaymentMethodVisible] = useState(false);
   const [scheduledAt, setScheduledAt] = useState<Date | null>(null);
   const [wantsScheduledRide, setWantsScheduledRide] = useState(rideType === 'schedule');
@@ -171,7 +171,13 @@ export default function RideEstimateScreen() {
       }
 
       const storedPaymentMethodId = await getSavedRideEstimatePaymentMethod();
-      if (!isMounted || !storedPaymentMethodId) {
+      if (!isMounted) {
+        return;
+      }
+
+      if (!storedPaymentMethodId) {
+        setSelectedPaymentMethodId('cash');
+        await saveRideEstimatePaymentMethod('cash');
         return;
       }
 
@@ -277,6 +283,7 @@ export default function RideEstimateScreen() {
     navigation.navigate('RideAddressSearch', {
       rideType,
       rideCategory,
+      source: 'rideEstimate',
       fromAddress,
       toAddress,
       stops,
@@ -290,6 +297,7 @@ export default function RideEstimateScreen() {
     navigation.navigate('RideAddressSearch', {
       rideType,
       rideCategory,
+      source: 'rideEstimate',
       editTarget: 'from',
       fromAddress,
       toAddress,
@@ -301,6 +309,7 @@ export default function RideEstimateScreen() {
     navigation.navigate('RideAddressSearch', {
       rideType,
       rideCategory,
+      source: 'rideEstimate',
       editTarget: 'to',
       fromAddress,
       toAddress,
@@ -312,6 +321,7 @@ export default function RideEstimateScreen() {
     navigation.navigate('RideAddressSearch', {
       rideType,
       rideCategory,
+      source: 'rideEstimate',
       fromAddress,
       toAddress,
       stops,
@@ -401,6 +411,7 @@ export default function RideEstimateScreen() {
     }
 
     if (!selectedPaymentMethodId) {
+      showToast.info(t('ride_active_payment'), t('ride_payment_choose_title'));
       setIsPaymentMethodVisible(true);
       return;
     }
@@ -666,7 +677,10 @@ export default function RideEstimateScreen() {
         <RideScheduleBottomSheet
           visible={isSchedulePickerVisible}
           value={scheduledAt}
-          onClose={() => setIsSchedulePickerVisible(false)}
+          onClose={() => {
+            setIsSchedulePickerVisible(false);
+            setWantsScheduledRide(false);
+          }}
           onConfirm={(nextDate) => {
             setWantsScheduledRide(true);
             setScheduledAt(nextDate);

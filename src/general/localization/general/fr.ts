@@ -368,6 +368,8 @@ const fr = {
   search_filter_stars: 'étoiles',
   filter_button_label: 'Options de filtre',
   search_input_placeholder: "Rechercher n'importe quoi",
+  Recommended_restaurants: 'Restaurants recommandés',
+  home_drive_banners_title: 'Offres Drive',
 };
 
 export default fr;

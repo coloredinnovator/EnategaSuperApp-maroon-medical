@@ -1,29 +1,73 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import AppPopup from '../../../../../general/components/AppPopup';
 import HorizontalList from '../../../../../general/components/HorizontalList';
 import SectionActionHeader from '../../../../../general/components/SectionActionHeader';
-import Text from "../../../../../general/components/Text";
-import { useTheme } from "../../../../../general/theme/theme";
 import { useNearbyStores } from '../../../hooks';
 import type { DeliveryNearbyStore } from '../../../api/types';
-import { DiscoveryResultsSkeleton } from '../../../components/discovery';
+import {
+  DiscoveryResultsSkeleton,
+} from '../../../components/discovery';
+import DeliveriesSectionEmptyState from '../../../components/home/DeliveriesSectionEmptyState';
 import StoreCard from '../../../components/storeCard/StoreCard';
 import type { MultiVendorStackParamList } from '../../navigation/types';
+import type { GenericListFilters } from '../../../components/filters/types';
 
 type NavProp = NativeStackNavigationProp<
   MultiVendorStackParamList,
   "SeeAllScreen"
 >;
 
-export default function NearbyStoreList() {
+type Props = {
+  search?: string;
+  selectedCategoryId?: string | null;
+  selectedShopTypeId?: string | null;
+  filters?: GenericListFilters;
+};
+
+export default function NearbyStoreList(props: Props) {
+  const { search, selectedCategoryId, selectedShopTypeId, filters } = props;
   const { t } = useTranslation('deliveries');
   const navigation = useNavigation<NavProp>();
-  const { colors, typography } = useTheme();
-  const { data: nearbyStoresData = [], isPending: isNearbyStoresPending } = useNearbyStores();
+  const resolvedCategoryIds =
+    selectedCategoryId ? [selectedCategoryId] : (filters?.category_ids ?? []);
+  const resolvedCategoryId = resolvedCategoryIds[0] ?? undefined;
+  const hasSelectedShopTypeProp = Object.prototype.hasOwnProperty.call(
+    props,
+    'selectedShopTypeId',
+  );
+  const activeShopTypeId =
+    selectedShopTypeId && selectedShopTypeId.trim().length > 0
+      ? selectedShopTypeId
+      : undefined;
+  const shouldSkipBecauseEmptyShopType =
+    hasSelectedShopTypeProp && !activeShopTypeId;
+
+  const { data: nearbyStoresData = [], isPending: isNearbyStoresPending } = useNearbyStores({
+    enabled: !shouldSkipBecauseEmptyShopType,
+    search,
+    filters: {
+      category_ids: resolvedCategoryIds,
+      price_tiers: filters?.price_tiers ?? null,
+      address_id: filters?.address_id ?? null,
+      stock: filters?.stock ?? null,
+      sort_by: filters?.sort_by ?? null,
+    },
+    requestParams: {
+      category_id: resolvedCategoryId,
+      shop_type_id: activeShopTypeId,
+    },
+  });
+  const [selectedClosedStore, setSelectedClosedStore] = useState<DeliveryNearbyStore | null>(null);
   const isEmpty = !isNearbyStoresPending && nearbyStoresData.length === 0;
+  const shouldShowSeeAll = !isNearbyStoresPending && nearbyStoresData.length > 0;
+  const closedStoreTypeName = useMemo(
+    () => selectedClosedStore?.shopTypeName?.trim() || t('store_details_closed_store_fallback_name'),
+    [selectedClosedStore?.shopTypeName, t],
+  );
 
   const handleSeeAllNearbyRestaurants = useCallback(() => {
     navigation.navigate('SeeAllScreen', {
@@ -34,13 +78,17 @@ export default function NearbyStoreList() {
   }, [navigation, t]);
 
   const renderItem = ({ item }: { item: DeliveryNearbyStore }) => (
-    <StoreCard store={item} />
+    <StoreCard
+      store={item}
+      showClosedOverlay={item.isAvailable === false}
+      onClosedPress={item.isAvailable === false ? () => setSelectedClosedStore(item) : undefined}
+    />
   );
 
   return (
     <View style={styles.section}>
       <SectionActionHeader
-        actionLabel={t('multi_vendor_see_all')}
+        actionLabel={shouldShowSeeAll ? t('multi_vendor_see_all') : undefined}
         title={t('multi_vendor_nearby_store_title')}
         onActionPress={handleSeeAllNearbyRestaurants}
       />
@@ -48,26 +96,10 @@ export default function NearbyStoreList() {
       {isNearbyStoresPending ? (
         <DiscoveryResultsSkeleton />
       ) : isEmpty ? (
-        <View
-          style={[
-            styles.messageContainer,
-            { backgroundColor: colors.blue50 },
-          ]}
-        >
-          <Text
-            weight="medium"
-            style={[
-              styles.messageText,
-              {
-                color: colors.mutedText,
-                fontSize: typography.size.sm2,
-                lineHeight: typography.lineHeight.sm2,
-              },
-            ]}
-          >
-            {t('multi_vendor_location_stores_empty')}
-          </Text>
-        </View>
+        <DeliveriesSectionEmptyState
+          title={t('multi_vendor_home_section_empty_title')}
+          message={t('multi_vendor_location_stores_empty')}
+        />
       ) : (
         <HorizontalList
           data={nearbyStoresData}
@@ -77,19 +109,35 @@ export default function NearbyStoreList() {
           renderItem={renderItem}
         />
       )}
+
+      <AppPopup
+        description={t('store_details_closed_store_description', { shopTypeName: closedStoreTypeName })}
+        dismissOnOverlayPress
+        onRequestClose={() => setSelectedClosedStore(null)}
+        primaryAction={{
+          label: t('store_details_close'),
+          onPress: () => setSelectedClosedStore(null),
+        }}
+        secondaryAction={{
+          label: t('store_closed_see_menu'),
+          onPress: () => {
+            if (!selectedClosedStore) {
+              return;
+            }
+
+            navigation.navigate('StoreDetails', { store: selectedClosedStore });
+            setSelectedClosedStore(null);
+          },
+          variant: 'secondary',
+        }}
+        title={t('store_closed_modal_title')}
+        visible={Boolean(selectedClosedStore)}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  messageContainer: {
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  messageText: {
-    textAlign: "center",
-  },
   section: {
     gap: 12,
     paddingHorizontal: 16,

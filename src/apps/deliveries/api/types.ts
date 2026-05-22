@@ -195,9 +195,19 @@ export interface DeliveryNearbyStoresParams {
     latitude?: number;
     longitude?: number;
     stock?: string;
+    category_id?: string;
     category_ids?: string[];
+    shop_type_id?: string;
     subcategory_id?: string;
-    price_tiers?: string;
+    price_tiers?: string | string[];
+    sort_by?: string;
+}
+
+export interface DeliveryRecommendedStoresParams {
+    offset?: number;
+    limit?: number;
+    latitude?: number;
+    longitude?: number;
     sort_by?: string;
 }
 
@@ -283,6 +293,11 @@ export interface DeliveryStoreDetailsProduct {
 export interface DeliveryDealsParams {
     offset?: number;
     limit?: number;
+    search?: string;
+    category_id?: string;
+    category_ids?: string[];
+    subcategory_id?: string;
+    shop_type_id?: string;
 }
 
 export interface DeliveryOrderAgainItem {
@@ -315,6 +330,11 @@ export interface DeliveryOrderAgainItem {
 export interface DeliveryOrderAgainParams {
     offset?: number;
     limit?: number;
+    search?: string;
+    category_id?: string;
+    category_ids?: string[];
+    subcategory_id?: string;
+    shop_type_id?: string;
 }
 
 export interface DeliveryStoreRecommendedProductsParams {
@@ -391,6 +411,11 @@ export type DeliveryNearbyStoresApiResponse =
     | DeliveryNearbyStore[];
 
 export type DeliveryVendorStoresApiResponse =
+    | ApiResponse<DeliveryNearbyStore[]>
+    | PaginatedDeliveryResponse<DeliveryNearbyStore>
+    | DeliveryNearbyStore[];
+
+export type DeliveryRecommendedStoresApiResponse =
     | ApiResponse<DeliveryNearbyStore[]>
     | PaginatedDeliveryResponse<DeliveryNearbyStore>
     | DeliveryNearbyStore[];

@@ -10,6 +10,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import Button from '../../../../general/components/Button';
 import { showToast } from '../../../../general/components/AppToast';
@@ -44,6 +45,7 @@ function toDayMonthYear(dateIso: string) {
 export default function CouponsScreen() {
   const { colors } = useTheme();
   const { t } = useTranslation('deliveries');
+  const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const [code, setCode] = useState('');
   const [hasClaimSuccessState, setHasClaimSuccessState] = useState(false);
@@ -59,7 +61,7 @@ export default function CouponsScreen() {
     () => (claimedCouponsQuery.data?.data ?? []).map((item) => ({
       offeredBy: (item.offered_by ?? []).map((store) => ({
         storeId: store.store_id,
-        storeImageUrl: store.store_image ?? null,
+        storeImageUrl: store.store_image ?? store?.store_user_image,
         storeName: store.store_name,
       })),
       amountLabel:
@@ -70,6 +72,10 @@ export default function CouponsScreen() {
         ? t('coupon_status_expired')
         : t('coupon_valid_until', { date: toDayMonthYear(item.end_date) }),
       code: item.code,
+      discountType: item.discount_type,
+      discountValue: item.discount_value,
+      maxDiscountCap: item.max_discount_cap,
+      minOrderValue: item.min_order_value,
       isActive: item.is_active,
       isExpired: item.status.toLowerCase() === 'expired',
       id: item.id,
@@ -114,6 +120,10 @@ export default function CouponsScreen() {
           id: coupon.id,
           code: coupon.code,
           title: coupon.title,
+          discountType: coupon.discountType,
+          discountValue: coupon.discountValue,
+          maxDiscountCap: coupon.maxDiscountCap,
+          minOrderValue: coupon.minOrderValue,
         });
         showToast.success(
           t('coupon_use_success_title'),
@@ -354,7 +364,15 @@ export default function CouponsScreen() {
               </View>
             )}
           />
-          <View style={[styles.bottomBar, { backgroundColor: colors.background }]}>
+          <View
+            style={[
+              styles.bottomBar,
+              {
+                backgroundColor: colors.background,
+                paddingBottom: Math.max(insets.bottom, 12),
+              },
+            ]}
+          >
             <Button
               label={t('coupon_claim')}
               style={styles.submitButton}
@@ -375,7 +393,7 @@ const styles = StyleSheet.create({
   bottomBar: {
     paddingHorizontal: 16,
     paddingTop: 12,
-    paddingBottom: 24,
+    paddingBottom: 12,
   },
   container: {
     flex: 1,

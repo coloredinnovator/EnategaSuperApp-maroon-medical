@@ -17,6 +17,7 @@ import CheckoutScreenContent from '../../components/checkout/CheckoutScreenConte
 import CartScreenErrorState from '../../components/cart/CartScreenErrorState';
 import CartScreenSkeleton from '../../components/cart/CartScreenSkeleton';
 import useAddress from '../../../../general/hooks/useAddress';
+import useCurrentLocation from '../../../../general/hooks/useCurrentLocation';
 import useSelectSavedAddress from '../../../../general/hooks/useSelectSavedAddress';
 import { useCart } from '../../hooks/useCart';
 import { useCheckoutPreview } from '../../hooks/useCheckoutPreview';
@@ -116,6 +117,44 @@ function getPreviewInput(
   };
 }
 
+function applyPercentageCouponFallback(params: {
+  subtotal: number;
+  backendDiscount: number;
+  discountType?: string;
+  discountValue?: number;
+  maxDiscountCap?: number;
+  minOrderValue?: number;
+}) {
+  const {
+    subtotal,
+    backendDiscount,
+    discountType,
+    discountValue,
+    maxDiscountCap,
+    minOrderValue,
+  } = params;
+
+  // Keep current behavior for FIXED/FLAT and for already-applied backend discount.
+  if (discountType !== 'PERCENTAGE' || backendDiscount > 0) {
+    return backendDiscount;
+  }
+
+  if (typeof discountValue !== 'number' || discountValue <= 0) {
+    return backendDiscount;
+  }
+
+  if (typeof minOrderValue === 'number' && subtotal < minOrderValue) {
+    return backendDiscount;
+  }
+
+  const percentageAmount = (subtotal * discountValue) / 100;
+  const cappedAmount = typeof maxDiscountCap === 'number' && maxDiscountCap > 0
+    ? Math.min(percentageAmount, maxDiscountCap)
+    : percentageAmount;
+
+  return Number.isFinite(cappedAmount) && cappedAmount > 0 ? cappedAmount : backendDiscount;
+}
+
 export default function CheckoutScreen() {
   const { colors } = useTheme();
   const { t } = useTranslation('deliveries');
@@ -130,6 +169,7 @@ export default function CheckoutScreen() {
     checkoutUrl: string;
   } | null>(null);
   const { selectedAddress } = useAddress();
+  const { refreshCurrentLocation } = useCurrentLocation();
   const {
     addresses,
     isLoading: isAddressesLoading,
@@ -198,8 +238,9 @@ export default function CheckoutScreen() {
     console.log('[CheckoutPreview][Request]', {
       ...previewInput,
       selectedCouponCode: selectedCoupon?.code ?? null,
+      selectedTip,
     });
-  }, [previewInput, selectedCoupon?.code]);
+  }, [previewInput, selectedCoupon?.code, selectedTip]);
 
   React.useEffect(() => {
     if (!preview) {
@@ -294,6 +335,32 @@ export default function CheckoutScreen() {
   }, [paymentMethod, preview?.store]);
 
   React.useEffect(() => {
+    if (preview?.store?.stripeAllowed === false && leaveAtDoor) {
+      setLeaveAtDoor(false);
+    }
+  }, [leaveAtDoor, preview?.store?.stripeAllowed]);
+
+  React.useEffect(() => {
+    if (orderType !== 'delivery' || !leaveAtDoor || !preview?.store) {
+      return;
+    }
+
+    if (paymentMethod === 'stripe') {
+      return;
+    }
+
+    if (!preview.store.stripeAllowed) {
+      return;
+    }
+
+    setPaymentMethod('stripe');
+    showToast.info(
+      t('checkout_payment_card_title'),
+      t('checkout_leave_at_door_switched_to_card'),
+    );
+  }, [leaveAtDoor, orderType, paymentMethod, preview?.store, t]);
+
+  React.useEffect(() => {
     if (orderType !== 'pickup') {
       return;
     }
@@ -373,13 +440,16 @@ export default function CheckoutScreen() {
     });
   }, [navigation]);
 
-  const handleUseCurrentLocation = React.useCallback(() => {
+  const handleUseCurrentLocation = React.useCallback(async () => {
     setIsAddressSheetVisible(false);
+    const currentLocation = await refreshCurrentLocation();
     navigation.navigate('AddressChooseOnMap', {
       appPrefix: 'deliveries',
+      initialLatitude: currentLocation?.latitude,
+      initialLongitude: currentLocation?.longitude,
       origin: 'checkout',
     });
-  }, [navigation]);
+  }, [navigation, refreshCurrentLocation]);
 
   const handlePlaceOrderPress = React.useCallback(() => {
     if (!cart?.bucketId || !cart.storeId) {
@@ -388,6 +458,17 @@ export default function CheckoutScreen() {
 
     if (orderType === 'delivery' && !resolvedAddressId) {
       showToast.error(t('checkout_address_required'));
+      return;
+    }
+
+    if (orderType === 'delivery' && leaveAtDoor && paymentMethod !== 'stripe') {
+      if (preview?.store?.stripeAllowed) {
+        showToast.error(t('checkout_leave_at_door_card_required'));
+        setIsPaymentMethodScreenVisible(true);
+        return;
+      }
+
+      showToast.error(t('checkout_payment_card_unavailable_error'));
       return;
     }
 
@@ -430,6 +511,8 @@ export default function CheckoutScreen() {
     selectedCoupon?.code,
     messages,
     deliveryTimeMode,
+    leaveAtDoor,
+    preview?.store?.stripeAllowed,
     scheduledAt,
     selectedTip,
     savedCardsQuery.data?.cards,
@@ -552,6 +635,20 @@ export default function CheckoutScreen() {
     setDeliveryTimeMode('standard');
   }, []);
 
+  const handleLeaveAtDoorChange = React.useCallback((nextValue: boolean) => {
+    if (!nextValue) {
+      setLeaveAtDoor(false);
+      return;
+    }
+
+    if (!preview?.store?.stripeAllowed) {
+      showToast.error(t('checkout_payment_card_unavailable_error'));
+      return;
+    }
+
+    setLeaveAtDoor(true);
+  }, [preview?.store?.stripeAllowed, t]);
+
   const handleScheduleConfirm = React.useCallback((nextScheduledAt: string) => {
     if (!isCheckoutScheduledAtInFuture(nextScheduledAt)) {
       showToast.info(t('checkout_schedule_slot_expired'));
@@ -568,6 +665,9 @@ export default function CheckoutScreen() {
   }, []);
 
   const handleCustomTipPress = React.useCallback(() => {
+    console.log('[Checkout][Tip][OpenCustomTip]', {
+      selectedTip,
+    });
     setCustomTipValue(selectedTip > 0 ? selectedTip.toFixed(2) : '');
     setIsCustomTipScreenVisible(true);
   }, [selectedTip]);
@@ -588,14 +688,29 @@ export default function CheckoutScreen() {
 
   const handleCustomTipSave = React.useCallback(() => {
     const parsedTip = Number.parseFloat(customTipValue);
+    console.log('[Checkout][Tip][SaveCustomTip][Attempt]', {
+      customTipValue,
+      parsedTip,
+    });
 
     if (!Number.isFinite(parsedTip) || parsedTip <= 0) {
+      console.log('[Checkout][Tip][SaveCustomTip][Rejected]', {
+        customTipValue,
+        parsedTip,
+      });
       return;
     }
 
     setSelectedTip(parsedTip);
     setIsCustomTipScreenVisible(false);
   }, [customTipValue]);
+
+  React.useEffect(() => {
+    console.log('[Checkout][Tip][SelectedTipChanged]', {
+      selectedTip,
+      orderType,
+    });
+  }, [orderType, selectedTip]);
 
   const handleCloseCustomTipScreen = React.useCallback(() => {
     setIsCustomTipScreenVisible(false);
@@ -635,7 +750,51 @@ export default function CheckoutScreen() {
     );
   }
 
-  const previewTotal = preview?.pricing.totalAmount ?? cart.finalPrice;
+  const adjustedPricing = React.useMemo(() => {
+    if (!preview?.pricing) {
+      return null;
+    }
+
+    const nextDiscount = applyPercentageCouponFallback({
+      subtotal: preview.pricing.subtotal,
+      backendDiscount: preview.pricing.discount,
+      discountType: selectedCoupon?.discountType,
+      discountValue: selectedCoupon?.discountValue,
+      maxDiscountCap: selectedCoupon?.maxDiscountCap,
+      minOrderValue: selectedCoupon?.minOrderValue,
+    });
+
+    if (nextDiscount === preview.pricing.discount) {
+      return preview.pricing;
+    }
+
+    const nextTotalAmount = Math.max(
+      0,
+      preview.pricing.subtotal
+      - nextDiscount
+      + preview.pricing.tax
+      + preview.pricing.packingCharges
+      + preview.pricing.deliveryFee
+      + preview.pricing.riderTip,
+    );
+
+    return {
+      ...preview.pricing,
+      discount: nextDiscount,
+      totalAmount: nextTotalAmount,
+    };
+  }, [
+    preview?.pricing,
+    selectedCoupon?.discountType,
+    selectedCoupon?.discountValue,
+    selectedCoupon?.maxDiscountCap,
+    selectedCoupon?.minOrderValue,
+  ]);
+  const adjustedPreview = React.useMemo(
+    () => (preview && adjustedPricing ? { ...preview, pricing: adjustedPricing } : preview),
+    [adjustedPricing, preview],
+  );
+  const previewTotal = adjustedPreview?.pricing.totalAmount ?? cart.finalPrice;
   const selectedAddressLabel = formatDeliveryAddressLabel(selectedAddress);
   const paymentIconName = paymentMethod === 'stripe' ? 'card-outline' : 'cash-outline';
   const paymentTitle = getCheckoutPaymentMethodTitle(paymentMethod, t);
@@ -675,11 +834,18 @@ export default function CheckoutScreen() {
     paymentMethod,
     preview?.store,
   );
+  const isLeaveAtDoorCardRequired =
+    orderType === 'delivery' && leaveAtDoor && paymentMethod !== 'stripe';
+  const leaveAtDoorPaymentErrorMessage = isLeaveAtDoorCardRequired
+    ? (preview?.store?.stripeAllowed
+      ? t('checkout_leave_at_door_card_required')
+      : t('checkout_payment_card_unavailable_error'))
+    : null;
   const paymentErrorMessage = !isPaymentAvailable
     ? paymentMethod === 'stripe'
       ? t('checkout_payment_card_unavailable_error')
       : t('checkout_payment_cod_unavailable_error')
-    : null;
+    : leaveAtDoorPaymentErrorMessage;
 
   if (stripeCheckout) {
     return (
@@ -753,13 +919,14 @@ export default function CheckoutScreen() {
         courierMessage={messages.courier}
         deliveryTimeMode={deliveryTimeMode}
         hasAddressRequirement={orderType === 'delivery' && !selectedAddress?.id}
-        isPickupEnabled={preview?.store.pickupAllowed ?? true}
+        isPickupEnabled={adjustedPreview?.store.pickupAllowed ?? true}
         isPromoApplied={isPromoApplied}
         isPlacingOrder={placeOrderMutation.isPending}
-        isPaymentBlocked={!isPaymentAvailable}
+        isPaymentBlocked={!isPaymentAvailable || isLeaveAtDoorCardRequired}
         isPreviewEnabled={Boolean(previewInput)}
         isPreviewError={isPreviewError}
         isPreviewPending={isPreviewPending}
+        canShowLeaveAtDoor={preview?.store?.stripeAllowed ?? false}
         leaveAtDoor={leaveAtDoor}
         onAddressPress={handleAddressPress}
         onBackPress={handleBackPress}
@@ -767,7 +934,7 @@ export default function CheckoutScreen() {
           handleMessagePress('courier');
         }}
         onDeliveryTimeModeChange={handleDeliveryTimeModeChange}
-        onLeaveAtDoorChange={setLeaveAtDoor}
+        onLeaveAtDoorChange={handleLeaveAtDoorChange}
         onOrderTypeChange={setOrderType}
         onPlaceOrderPress={handlePlaceOrderPress}
         onPaymentPress={handlePaymentMethodPress}
@@ -783,7 +950,13 @@ export default function CheckoutScreen() {
           void refetchPreview();
         }}
         onCustomTipPress={handleCustomTipPress}
-        onTipChange={setSelectedTip}
+        onTipChange={(amount) => {
+          console.log('[Checkout][Tip][QuickSelect]', {
+            amount,
+            previousTip: selectedTip,
+          });
+          setSelectedTip(amount);
+        }}
         orderType={orderType}
         paymentErrorMessage={paymentErrorMessage}
         paymentIconName={paymentIconName}
@@ -792,7 +965,7 @@ export default function CheckoutScreen() {
         promoCode={promoCode}
         promoTitle={promoTitle}
         promoSubtitle={promoSubtitle}
-        preview={preview ?? null}
+        preview={adjustedPreview ?? null}
         restaurantMessage={messages.restaurant}
         scheduledAt={scheduledAt}
         selectedAddressLabel={selectedAddressLabel}

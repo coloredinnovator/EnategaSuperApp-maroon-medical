@@ -1,4 +1,4 @@
-import React, { memo, useMemo } from 'react';
+import React, { memo, useEffect, useMemo, useRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../../../general/theme/theme';
@@ -15,6 +15,7 @@ type Props = {
   onSearchPress: () => void;
   searchDisabled?: boolean;
   hideOptionsRow?: boolean;
+  showSearchInput?: boolean;
 };
 
 function RideOptionsHeader({
@@ -24,12 +25,11 @@ function RideOptionsHeader({
   onSearchPress,
   searchDisabled = false,
   hideOptionsRow = false,
+  showSearchInput = true,
 }: Props) {
   const { colors } = useTheme();
   const { t } = useTranslation('rideSharing');
-
-  const fixedColumnItems = useMemo(() => rideOptions.slice(0, 2), [rideOptions]);
-  const scrollItems = useMemo(() => rideOptions.slice(2), [rideOptions]);
+  const scrollRef = useRef<ScrollView>(null);
 
   const optionLayout = useMemo(() => {
     if (rideOptions.length === 0) {
@@ -38,25 +38,13 @@ function RideOptionsHeader({
 
     return (
       <View style={styles.optionsLayout}>
-        <View style={styles.fixedRow}>
-          {fixedColumnItems.map((item) => (
-            <View key={item.id} style={styles.fixedRowItem}>
-              <RideOptionCard
-                item={item}
-                isActive={item.id === selectedCategory}
-                onPress={onSelectCategory}
-                containerStyle={styles.optionCardContainer}
-              />
-            </View>
-          ))}
-        </View>
-
         <ScrollView
+          ref={scrollRef}
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.scrollRowContainer}
         >
-          {scrollItems.map((item) => (
+          {rideOptions.map((item) => (
             <View key={item.id} style={styles.scrollRowItem}>
               <RideOptionCard
                 item={item}
@@ -69,31 +57,48 @@ function RideOptionsHeader({
         </ScrollView>
       </View>
     );
-  }, [fixedColumnItems, onSelectCategory, rideOptions.length, scrollItems, selectedCategory]);
+  }, [onSelectCategory, rideOptions, selectedCategory]);
+
+  useEffect(() => {
+    if (!scrollRef.current || !selectedCategory || rideOptions.length === 0) {
+      return;
+    }
+
+    const selectedIndex = rideOptions.findIndex((option) => option.id === selectedCategory);
+    if (selectedIndex < 0) {
+      return;
+    }
+
+    const itemWidthWithGap = 140;
+    const targetX = Math.max(0, selectedIndex * itemWidthWithGap - 16);
+    scrollRef.current.scrollTo({ x: targetX, animated: true });
+  }, [rideOptions, selectedCategory]);
 
   return (
     <>
       {hideOptionsRow ? null : (
         <View style={styles.optionsGrid}>{optionLayout}</View>
       )}
-      <Pressable
-        onPress={() => onSearchPress()}
-        disabled={searchDisabled}
-        style={[
-          styles.searchInput,
-          {
-            borderColor: colors.border,
-            shadowColor: colors.shadowColor,
-            backgroundColor: colors.surface,
-            opacity: searchDisabled ? 0.6 : 1,
-          },
-        ]}
-      >
-        <Icon type="Feather" name="search" size={16} color={colors.iconMuted} />
-        <Text style={{ color: colors.mutedText }}>
-          {t('ride_search_placeholder')}
-        </Text>
-      </Pressable>
+      {showSearchInput ? (
+        <Pressable
+          onPress={() => onSearchPress()}
+          disabled={searchDisabled}
+          style={[
+            styles.searchInput,
+            {
+              borderColor: colors.border,
+              shadowColor: colors.shadowColor,
+              backgroundColor: colors.surface,
+              opacity: searchDisabled ? 0.6 : 1,
+            },
+          ]}
+        >
+          <Icon type="Feather" name="search" size={16} color={colors.iconMuted} />
+          <Text style={{ color: colors.mutedText }}>
+            {t('ride_search_placeholder')}
+          </Text>
+        </Pressable>
+      ) : null}
     </>
   );
 }
@@ -106,25 +111,16 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   optionsLayout: {
-    flexDirection: 'column',
-    gap: 8,
-  },
-  fixedRow: {
     flexDirection: 'row',
-    gap: 8,
-  },
-  fixedRowItem: {
-    flex: 1,
-    minWidth: 0,
   },
   scrollRowContainer: {
     flexDirection: 'row',
     gap: 8,
-    paddingRight: 12,
+    paddingRight: 16,
     paddingBottom: 2,
   },
   scrollRowItem: {
-    width: 110,
+    width: 132,
     flexShrink: 0,
   },
   optionCardContainer: {
