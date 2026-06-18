@@ -1,0 +1,3 @@
+[submodule "packages/maroon-kernel"]
+	path = packages/maroon-kernel
+	url = https://github.com/coloredinnovator/maroon-kernel.git
